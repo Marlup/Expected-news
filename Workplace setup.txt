@@ -1,42 +1,45 @@
-Required Setup
+1. Required Setup
 *********************
 
 Git Bash
 Text-Editor
 Python 3: The latest 
 
-Steps to Create a Virtual Environment
+2. Steps to Create a Virtual Environment
 *****************************************
 
-1. You can create the new directory named 'project-blog' by using 'mkdir' 
+2.1. You can create the new directory by using cmd command 'mkdir' (mkdir "name my of folder") 
 command in your Desktop.
 
-2. Change the directory to 'project-blog' by using 'cd' command.
+2.2. Change the directory with cd command (cd path).
 
-3. The virtual environment is created by using 'python -m venv env', where env is our 
+2.3. The virtual environment is created by using 'python -m venv env', where env is our 
 virtual environment
 
-4. For Activating your Virtual Environment:
+2.4. For Activating your Virtual Environment:
 source webEnv/scripts/activate
 
-5. Installing Django: You can use 'pip install django'
+2.5. Installing Django: You can use 'pip install django'
 
-Making a Migrations
+3. Making a Migrations
 ***************************
 
+* NOTE. Only necessary if a new Model is created or applied changes on current Model 
 'python manage.py makemigrations' is a first step process which reads the 
 'models.py' after it's creation. It creates a new folder called 'migrations' 
 where there is a file named '0001_initial.py', which are portable across the 
 database.
 
-Migrating to the database
+4. Migrating to the database
 **************************
 
+* NOTE. Only execute when point 3. was executed
 This is the second step where 'python manage.py migrate' reads the newly 
 created folder 'migrations' and creates the database, and it evolves the database 
 when there is a change in the model.
 
 Creating SuperUser and Viewing in the Administration panel
 ***************************************************************
+* NOTE. Only execute you have no superusers.
 You need to create a SuperUser before accessing the 'admin' panel. 
 To do so, use 'winpty python manage.py createsuperuser'.
