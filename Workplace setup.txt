@@ -1,0 +1,42 @@
+Required Setup
+*********************
+
+Git Bash
+Text-Editor
+Python 3: The latest 
+
+Steps to Create a Virtual Environment
+*****************************************
+
+1. You can create the new directory named 'project-blog' by using 'mkdir' 
+command in your Desktop.
+
+2. Change the directory to 'project-blog' by using 'cd' command.
+
+3. The virtual environment is created by using 'python -m venv env', where env is our 
+virtual environment
+
+4. For Activating your Virtual Environment:
+source webEnv/scripts/activate
+
+5. Installing Django: You can use 'pip install django'
+
+Making a Migrations
+***************************
+
+'python manage.py makemigrations' is a first step process which reads the 
+'models.py' after it's creation. It creates a new folder called 'migrations' 
+where there is a file named '0001_initial.py', which are portable across the 
+database.
+
+Migrating to the database
+**************************
+
+This is the second step where 'python manage.py migrate' reads the newly 
+created folder 'migrations' and creates the database, and it evolves the database 
+when there is a change in the model.
+
+Creating SuperUser and Viewing in the Administration panel
+***************************************************************
+You need to create a SuperUser before accessing the 'admin' panel. 
+To do so, use 'winpty python manage.py createsuperuser'.
