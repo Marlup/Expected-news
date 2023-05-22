@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html>
+  <head>
+      <style>
+          main {
+              display: flex;
+              flex-direction: column;
+              min-height: 100vh;
+              justify-content: space-between;
+            }
+          .gradient-background {
+              background: linear-gradient(to bottom, #ffffff, indigo);
+            }
+
+          .main-heading {
+              text-align:center;
+          }
+          .news-container {
+              min-height: 900px;
+              position: absolute;
+              left: 100px;
+              right: 100px;
+              
+          }
+          .new {
+              text-align: center;
+              margin-top: 50px;
+              margin-bottom: 10px;;
+          }
+          .footer-container {
+              margin-top: 20px;
+              width: 200px;
+              text-align: center;
+          }
+          .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+          }
+
+          .pagination a {
+              display: inline-block;
+              padding: 10px;
+              margin: 0 5px;
+              background-color: #f2f2f2;
+              color: #333;
+              text-decoration: none;
+              border-radius: 5px;
+            }
+
+          .pagination a:hover {
+              background-color: #333;
+              color: #fff;
+          }
+
+          .pagination p {
+              margin: 0 10px;
+          }
+          
+      </style>
+      <script>
+          function toggleDetails(container) {
+              var subtitle = container.children[2];
+              var expandbutton = container.children[3];
+              if (expandbutton.innerHTML === "expand") {
+              // Hide expand button and show subtitle
+                  expandbutton.innerHTML = "close";
+                  subtitle.style.display = "block";
+              } else {
+              // Show expand button and hide subtitle
+                  expandbutton.innerHTML = "expand";
+                  subtitle.style.display = "none";
+              }
+          }
+      </script>
+      <title>Bad News</title>
+  </head>
+  <body class="gradient-background">
+      <header>
+          <div class="main-heading">
+              <h1 class="main-heading">Welcome to Bad News</h1>
+          </div>
+      </header>
+      <div>between dates/from={{ from_date }}-to={{ to_date }}/page=1/
+        <form method="post" action="between dates/from={{ from_date }}-to={{ to_date }}/page=1/">
+          {% csrf_token %}
+          <input type="date" name="from_date">
+          <input type="date" name="to_date">
+        </form>
+        <button type="submit">Submit</button>
+      </div>
+
+      <main>
+          {% block content %}
+          {% endblock %}
+      </main>
+      <footer class="footer-container">
+          <nav>
+              <a href="#">Home</a>
+              <a href="#">About</a>
+              <a href="#">Contact</a>
+          </nav>
+              &copy; 2023 Bad News
+      </footer>
+  </body>
+</html>
