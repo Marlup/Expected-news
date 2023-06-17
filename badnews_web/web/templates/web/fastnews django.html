@@ -1,0 +1,62 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fast News</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'web/fastnews.css' %}">
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.0/jquery.min.js"></script>
+    <script>
+        $(document).ready(function(){
+          $('.btn-expand').click(function() {
+            $(this).siblings('.expandible').slideToggle('slow');
+          });
+        });
+        
+        </script>
+</head>
+<body>
+    <header>
+        <h1>FAST NEWS</h1>
+        <h2>Los mejores contenidos resumidos</h2>
+        <hr>
+        <nav>
+            <a href="">Feed</a>
+            <a href="">Prensa</a>
+            <a href="">Podcast</a>
+            <a href="">Articulos Científicos</a>
+            <a href="">Videos de Youtube</a>
+        </nav>
+        <hr>
+    </header>
+   <br>
+    <main>
+        {% for new in news %}
+            <div class="noticia">
+                <img src= "{{ post.imagen }}"  alt="Image">
+                <h1>{{ new.title }}</h1>
+                <h2>{{ new.subtitle }}</h2>
+                <h6>{{ new.source }}</h6>
+                <div class="expandible" >
+                    <p>{{ post.article }}</p>
+                    <a href="">Fuente</a>
+
+                </div>
+                <br>
+                <button class="btn-expand">V</button>
+            </div>
+        
+        {% endfor %}
+    <br>    
+         
+    </main>
+    <footer>
+
+    </footer>
+</body>
+</html>

@@ -10,3 +10,4 @@ class New(models.Model):
     creationDate = models.DateField(default="0000-01-01")
     updateDate = models.DateField(default="1-1-1")
     author = models.CharField(max_length=255, default="empty author")
+    image_url = models.CharField(max_length=255, default="empty image")
