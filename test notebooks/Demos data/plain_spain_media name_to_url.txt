@@ -1,0 +1,189 @@
+El País;elpais.com
+ABC;abc.es
+El Español;elespanol.com
+El Mundo;elmundo.es
+La Vanguardia;lavanguardia.com
+El Periódico de Catalunya;elperiodico.com
+La Razón;larazon.es
+20 Minutos;20minutos.es
+ABC de Sevilla;sevilla.abc.es/
+Europa Press;europapress.es
+elDiario.es;eldiario.es
+La Voz de Galicia;lavozdegalicia.es
+El Correo Español;elcorreo.com
+Libertad Digital;libertaddigital.com
+SUR;diariosur.es
+Diario de Sevilla;diariodesevilla.es
+Crónica global;cronicaglobal.elespanol.com
+El Diario Vasco;diariovasco.com
+La Verdad;laverdad.es
+Levante;levante-emv.com
+El Confidencial;elconfidencial.com
+Las Provincias;lasprovincias.es
+Heraldo de Aragón;heraldo.es
+OK Diario;okdiario.com
+Ideal;ideal.es
+Huffington Post España;huffingtonpost.es
+Faro de Vigo;farodevigo.es
+Canarias 7;canarias7.es
+El Periódico de España;epe.es
+La Información;lainformacion.com
+Periodista Digital;periodistadigital.com
+Publico;publico.es
+DEIA;deia.eus
+El Comercio;elcomercio.es
+Diario de Mallorca;diariodemallorca.es
+Hoy de Badajoz;hoy.es
+El Diario Montañes;eldiariomontanes.es
+Información;informacion.es
+La Rioja;larioja.com
+República;republica.com
+Diario de Cádiz;diariodecadiz.es
+El Plural;elplural.com
+Diario de Noticias;noticiasdenavarra.com
+La Nueva España;lne.es
+Última Hora;ultimahora.es
+El Confidencial Digital;elconfidencialdigital.com
+El Día;eldia.es
+La Opinión de Murcia;laopiniondemurcia.es
+El Periódico de Aragón;elperiodicodearagon.com
+El Periódico de Extremadura;elperiodicoextremadura.com
+El Norte de Castilla;elnortedecastilla.es
+Diario de Córdoba;diariocordoba.com
+La voz;lavozdigital.es
+El Correo Gallego;elcorreogallego.es
+Heraldo diario de soria;heraldodiariodesoria.elmundo.es
+El correo de burgos;elcorreodeburgos.elmundo.es
+Estrella Digital;estrelladigital.es
+Granada Hoy;granadahoy.com
+Diario de león;diariodeleon.es
+La Opinión de Zamora;laopiniondezamora.es
+Huelva Información;huelvainformacion.es
+La Opinión A Coruña;laopinioncoruna.es
+El Progreso;elprogreso.es
+Diari de Tarragona;diaridetarragona.com
+El nacional;elnacional.cat
+Diario de Navarra;diariodenavarra.es
+El Independiente;elindependiente.com
+La región;laregion.es
+La voz de asturias;lavozdeasturias.es
+Agencia Efe;efe.com
+La crónica de badajoz;lacronicadebadajoz.elperiodicoextremadura.com
+La Opinión de Málaga;laopiniondemalaga.es
+La Provincia;laprovincia.es
+Málaga Hoy;malagahoy.es
+Mediterráneo;elperiodicomediterraneo.com
+Madrid Diario;madridiario.es
+Qué;que.es
+Voz Populi;vozpopuli.com
+Diario de Valladolid;diariodevalladolid.elmundo.es
+La Gaceta de Salamanca;lagacetadesalamanca.es
+Diario de Burgos;diariodeburgos.es
+Diario siglo xxi;diariosigloxxi.com
+Diario de Pontevedra;diariodepontevedra.es
+Noticias de gipuzkoa;noticiasdegipuzkoa.eus
+Diario de Almería;diariodealmeria.es
+NIUS;niusdiario.es
+Atlántico;atlantico.net
+Diario de Jaén;diariojaen.es
+El Debate;eldebate.com
+La Voz de Almería;lavozdealmeria.com
+Diario del Altoaragón;diariodelaltoaragon.es
+Lanza;lanzadigital.com
+Infolibre;infolibre.es
+Galicia digital;galiciadigital.com
+El Día de Córdoba;eldiadecordoba.es
+Diario de jerez;diariodejerez.es
+Diario Crítico;diariocritico.com
+The Objetive;theobjective.com
+Nueva Tribuna;nuevatribuna.es
+El correo de andalucía;elcorreoweb.es
+Europa sur;europasur.es
+Gara;naiz.eus
+Mallorca diario;mallorcadiario.com
+Diario de Noticias de Álava;noticiasdealava.eus
+Te Interesa;teinteresa.es
+Diario de Teruel;diariodeteruel.es
+El ideal gallego;elidealgallego.com
+Diario palentino;diariopalentino.es
+El Boletín;elboletin.com
+Murcia.com;murcia.com
+La Tribuna de Albacete;latribunadealbacete.es
+Ctxt;ctxt.es
+El día de valladolid;eldiadevalladolid.com
+Mundiario;mundiario.com
+El Salto;elsaltodiario.com
+Moncloa;moncloa.com
+Diario de ferrol;diariodeferrol.com
+El Imparcial;elimparcial.es
+Madrid Actual;madridactual.es
+EsDiario;esdiario.com
+Diario 16;diario16.com
+La Gaceta;gaceta.es
+Melilla Hoy;melillahoy.es
+Diario de ávila;diariodeavila.es
+La Tribuna de Toledo;latribunadetoledo.es
+El faro;elfarodeceuta.es
+Noticias de la rioja;sdi.es
+Aragón digital;aragondigital.es
+La Tribuna de Ciudad Real;latribunadeciudadreal.es
+La nueva crónica;lanuevacronica.com
+Galicia press;galiciapress.es
+Murcia diario;murciadiario.com
+Catalunya press;catalunyapress.es
+Alerta;eldiarioalerta.com
+El triangle;eltriangle.eu
+Cambio 16;cambio16.com
+El mon;elmon.cat
+Metropoli abierta;metropoliabierta.com
+Clm24;clm24.es
+Crónica balear;cronicabalear.es
+El adelantado;eladelantado.com
+El día de segovia;eldiasegovia.es
+Alerta digital;alertadigital.com
+El Faro;elfarodemelilla.es
+Cuarto Poder;cuartopoder.es
+Navarra digital;navarradigital.opennemas.com
+El Cierre Digital;elcierredigital.com
+Mediterráneo Digital;mediterraneodigital.com
+El día de soria;eldiasoria.es
+La Tribuna de Cuenca;latribunadecuenca.es
+El día digital;eldiadigital.es
+Extremadura 7 días;extremadura7dias.com
+Cantabria liberal;cantabrialiberal.com
+Noticias galicia;noticiasgalicia.com
+Voz Libre;vozlibre.com
+Madrid Press;madridpress.com
+Digital sevilla;digitalsevilla.com
+Cantabria 24 horas;cantabria24horas.com
+Crónica vasca;cronicavasca.com
+Digital Extremadura;digitalextremadura.com
+El pueblo;elpueblodeceuta.es
+Diario Ya;diarioya.es
+Gipuzkoa gaur;gipuzkoagaur.com
+El catalán;elcatalan.es
+Luh Noticias;luhnoticias.es
+El digital de canarias;eldigitaldecanarias.net
+El Correo de España;elcorreodeespana.com
+Objetivo clm;objetivocastillalamancha.es
+Murcia noticias;murcianoticias.es
+Sabemos;sabemos.es
+El periódico de canarias;elperiodicodecanarias.es
+La tribuna del país vasco;latribunadelpaisvasco.com
+Navarra información;navarrainformacion.es
+El noticiero;elnoticierodigital.com
+La verdad de ceuta;laverdaddeceuta.com
+Noticias mallorca;noticiasmallorca.es
+El día de zamora;eldiadezamora.es
+Canarias diario;canariasdiario.com
+Don Diario;dondiario.com
+El liberal;elliberal.cat
+Galicia diario;galiciadiario.com
+Noticiero Madrid;noticieromadrid.es
+Diario sí;diariosi.com
+Euskadi noticias;euskadinoticias.es
+Navarra sur;navarrasur.es
+Diari balear;diaribalear.es
+Navarra norte;navarranorte.es
+Diario Independiente Digital;diarioindependientedigital.com
+Informaciones de cuenca;informacioncuenca.com
