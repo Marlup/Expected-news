@@ -153,7 +153,7 @@ def get_body_summary(text):
     body_summary = regex_only_summary.search(message_content).groups()[0]
     return body_summary, n_tokens
 
-def find_media_section(base_url):
+def find_media_section(base_url, pid: str):
     try:
         response = requests.get(base_url, headers=HEADERS, timeout=10)  # Set an appropriate timeout value (in seconds)
     except requests.exceptions.Timeout:
@@ -168,8 +168,13 @@ def find_media_section(base_url):
         return []
 
     parsed_hmtl = BeautifulSoup(response.content, "html.parser")
-    
-    links = [x.attrs.get("href", None) for x in parsed_hmtl.body.find_all("a")]
+    for x in parsed_hmtl.body.find_all("a"):
+        x.attrs.get("href", None)
+    try:
+        links = [x.attrs.get("href", None) for x in parsed_hmtl.body.find_all("a")]
+    except Exception as e:
+        print(e)
+        return None
 
     links_serie = pd.Series(links).dropna()
     nodes = links_serie.str.replace(base_url, "", regex=True)
@@ -183,7 +188,7 @@ def find_media_section(base_url):
     links_valid_complete = [base_url + x if not x.startswith(base_url) else x for x in links_valid]
     links_valid_complete_unique = pd.Series(links_valid_complete).unique().tolist()
 
-    last_media_section_url, last_media_news_url = read_news_checkpoint()
+    last_media_section_url, last_media_news_url = read_news_checkpoint(pid)
     if not last_media_section_url:
         checkpoint_started = False
     else:
@@ -195,9 +200,10 @@ def find_media_section(base_url):
             if media_section_url == last_media_section_url or not last_media_section_url:
                 checkpoint_started = False
             else:
-                print(media_section_url)
+                print("Skip", media_section_url)
                 continue
-        urls, checkpoint_started = find_news_urls(media_section_url, 
+        urls, checkpoint_started = find_news_urls(pid,
+                                                  media_section_url, 
                                                   current_date, 
                                                   current_time, 
                                                   checkpoint_started, 
@@ -238,7 +244,7 @@ def find_media_section(base_url):
         print(f"\tmedia name: {media_section_url} counts: {counts}")
     return None #pd.Series(all_urls).unique().tolist()
 
-def find_news_urls(media_url, date, time, on_start_checkpoint, last_media, last_news_url) -> (list, bool):
+def find_news_urls(pid, media_url, date, time, on_start_checkpoint, last_media, last_news_url) -> (list, bool):
     try:
         response = requests.get(media_url, headers=HEADERS, timeout=10)  # Set an appropriate timeout value (in seconds)
     except requests.exceptions.Timeout:
@@ -283,7 +289,7 @@ def find_news_urls(media_url, date, time, on_start_checkpoint, last_media, last_
             valid_news_urls.append(news_url)
             # Save new checkpoint
             if not on_start_checkpoint and (i % N_SAVE_CHECKPOINT == 0):
-                save_news_checkpoint(media_url, news_url)
+                save_news_checkpoint(pid, media_url, news_url)
         #if i > 5:
         #    break
     return list(set(valid_news_urls)), on_start_checkpoint
@@ -481,10 +487,10 @@ def split_file_and_process(input_file_path, num_splits, process_function):
     processes = []
     for i, chunk in enumerate(chunks):
         split_file_path = f"split_{i}.txt"
-        with open(split_file_path, 'w') as split_file:
+        with open(os.path.join("data", split_file_path), 'w') as split_file:
             split_file.writelines(chunk)
 
-        process = multiprocessing.Process(target=process_function, args=(split_file_path,))
+        process = multiprocessing.Process(target=process_function, args=(split_file_path, chunk, str(i)))
         processes.append(process)
         process.start()
 
@@ -494,15 +500,9 @@ def split_file_and_process(input_file_path, num_splits, process_function):
 
     # Clean up the split files (optional)
     for i in range(num_splits):
-        split_file_path = f"split_{i}.txt"
+        save_news_checkpoint(str(i), "", "")
+        split_file_path = os.path.join("data", f"split_{i}.txt")
         os.remove(split_file_path)
-
-if __name__ == "__main__":
-    input_file_path = "your_input_file.txt"  # Replace with the path to your input file
-    num_cores = 4  # Set the number of cores you want to use
-
-    # Use the split_file_and_process function to process the file in parallel
-    split_file_and_process(input_file_path, num_cores, process_file)
 
 def main():
     file_name = "spain_media name_to_url.json"
@@ -526,14 +526,20 @@ def main():
         # Read stored news
         urls = find_media_section(media_url)
 
-def main_multi_threading_process(file_path):
+def main_multi_threading_process(file_path, chunk, pid: str):
     region = "Spain"
     print(f"Processing news from {region} region...")
-    with open("data/plain_spain_media name_to_url.txt", "w") as file_r:
-        name_to_media_urls = file_r.read().split("\n")
+    #with open("data/plain_spain_media name_to_url.txt", "w") as file_r:
+    #    name_to_media_urls = file_r.read().split("\n")
+    #print(os.path.join("data", file_path))
+    #with open(os.path.join("data", file_path), "w") as file_r:
+    #    name_to_media_urls = file_r.read().split("\n")
     media_stats_reporter = StatisticsReporter()
-    for media_line in name_to_media_urls.items():
+    #for media_line in name_to_media_urls.items():
+    #for media_line in name_to_media_urls:
+    for media_line in chunk:
         (_, media_url) = media_line.split(";")
+        media_url = media_url.strip()
         media_stats_reporter.restart_time()
         #if i > MAX_N_MEDIAS:
         #    break
@@ -543,14 +549,14 @@ def main_multi_threading_process(file_path):
         # Extract the author
         author = media_url
         # Read stored news
-        urls = find_media_section(media_url)
+        urls = find_media_section(media_url, pid)
 
 if __name__ == "__main__":
     current_date, current_time = update_date(current_date, current_time)
     print(f"\n...Datetime of process: {current_date} {current_time}...\n")
     #main()
 
-    num_cores = 4  # Set the number of cores you want to use
+    num_cores = 6  # Set the number of cores you want to use
     file_name = "plain_spain_media name_to_url.txt"
     file_path = os.path.join(".", "data", file_name)
 
@@ -558,5 +564,4 @@ if __name__ == "__main__":
     split_file_and_process(file_path, num_cores, main_multi_threading_process)
 
     conn.commit()
-    save_news_checkpoint("", "")
     print("\n...The process ended...")
