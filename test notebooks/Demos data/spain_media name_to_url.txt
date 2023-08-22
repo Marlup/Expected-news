@@ -1,0 +1,50 @@
+El País;elpais.com
+ABC;abc.es
+La Vanguardia;lavanguardia.com
+El Español;elespanol.com
+El Mundo;elmundo.es
+El Periódico de Catalunya;elperiodico.com
+La Razón;larazon.es
+Europa Press;europapress.es
+20 Minutos;20minutos.es
+El Confidencial;elconfidencial.com
+elDiario.es;eldiario.es
+ABC de Sevilla;sevilla.abc.es
+La Voz de Galicia;lavozdegalicia.es
+Libertad Digital;libertaddigital.com
+Crónica global;cronicaglobal.elespanol.com
+El Correo Español;elcorreo.com
+Diario de Sevilla;diariodesevilla.es
+SUR;diariosur.es
+El Diario Vasco;diariovasco.com
+Huffington Post España;huffingtonpost.es
+Levante;levante-emv.com
+Las Provincias;lasprovincias.es
+La Verdad;laverdad.es
+Vilaweb;vilaweb.cat
+Heraldo de Aragón;heraldo.es
+Faro de Vigo;farodevigo.es
+Ideal;ideal.es
+El Periódico de España;epe.es
+Publico;publico.es
+Diario de Mallorca;diariodemallorca.es
+La Información;lainformacion.com
+Periodista Digital;periodistadigital.com
+Canarias 7;canarias7.es
+OK Diario;okdiario.com
+DEIA;deia.eus
+Ara;ara.cat
+El Comercio;elcomercio.es
+Hoy de Badajoz;hoy.es
+La Nueva España;lne.es
+Diario de Cádiz;diariodecadiz.es
+El Diario Montañes;eldiariomontanes.es
+Información;informacion.es
+República;republica.com
+La Rioja;larioja.com
+Última Hora;ultimahora.es
+Diario de Noticias;noticiasdenavarra.com
+El Plural;elplural.com
+El Correo Gallego;elcorreogallego.es
+El Periódico de Aragón;elperiodicodearagon.com
+Diario de Córdoba;diariocordoba.com
