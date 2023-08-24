@@ -6,6 +6,7 @@ import json
 import os
 from datetime import datetime
 import time
+import multiprocessing
 
 DIGITAL_MEDIAS_URL = "https://www.prensaescrita.com/prensadigital.php"
 DIGITAL_MEDIAS_MAIN_ROOT = "https://www.prensaescrita.com"
@@ -102,16 +103,64 @@ class StatisticsReporter():
     def restart_time(self):
         self.time_start = time.time()
 
-    def write_extraction_stats(self, data, header=None, pid: str=0):
-        current_date, _ = str(datetime.today()).split(" ")
-        stats_file_name = "statistics_" + current_date + f"_{pid}" + ".csv"
-        path = os.path.join("data", stats_file_name)
+    def write_extraction_stats(self, data, 
+                               header=None, 
+                               pid: str=0, 
+                               input_date="",
+                               input_time="",
+                               main_folder="./scrapping statistics",
+                               subfolder=""
+                               ):
+        if not input_date or not input_time:
+            input_date, input_time = str(datetime.today()).split(" ")
+        input_time = input_time.split(" ")[-1].split(".")[0].replace(":", "-")
         process_time = str(round(time.time() - self.time_start, 1))
+        if not subfolder:
+            subfolder = f"processes_{input_date}"
         if isinstance(data, tuple):
             data = list(data)
-        with open(path, "a") as file:
-            if not os.path.exists(path):
+        if not os.path.exists(os.path.join(main_folder, subfolder)):
+            os.makedirs(os.path.join(main_folder, subfolder))
+
+        stats_path = os.path.join(main_folder, 
+                                  subfolder, 
+                                  f"process_{input_date}_{input_time}_pid_{pid}.csv",
+                                  )
+        with open(stats_path, "a") as file:
+            if not os.path.exists(stats_path):
                 if header is None:
                     header = "url;news_count;process_time\n"
                 file.write(header)
             file.write(";".join([str(x) for x in data] + [process_time + "\n"]))
+
+class FileManager():
+    def __init__(self) -> None:
+        self.files_map = {}
+    def add_files(self, 
+                  files: list, 
+                  open_mode: str="w"
+                  ):
+        for file_name in files:
+            self._add_file(file_name, 
+                           open_mode)
+    def _add_file(self, 
+                  file_name: str,
+                  open_mode="w"
+                  ):
+        self.files_map[file_name] = open(file_name, open_mode)
+    def write_on_file(self, 
+                      file_name: str,
+                      data: list, 
+                      lock: multiprocessing.Lock,
+                      pid: str=""
+                      ):
+        with lock:
+            if len(data) == 1:
+                self.files_map[file_name].write(data[0] + ";" + pid + "\n")
+            elif len(data) > 1:
+                self.files_map[file_name].write(";".join([str(x) for x in data] + [pid, 
+                                                                                   "\n"]))
+    def close_all_files(self):
+        for file in self.files_map.values():
+            file.close()
+            

@@ -11,6 +11,7 @@ import json
 import os
 import glob
 import multiprocessing
+from tqdm import tqdm
 
 from utilities import *
 
@@ -36,10 +37,45 @@ class ErrorReporter(Exception):
         super().__init__(message)
         with open("Errors log.txt", "w") as errors_file:
             errors_file.write(message)
-
-# Dynamical global variables
+## Constants
+SECONDS_IN_DAY = 86_400
+N_MAX_DAYS_OLD = 1
+FULL_START = True
+NUM_CORES = 10
+MAX_N_MEDIAS = 50
+N_SAVE_CHECKPOINT = 5
+# File names
+FILE_NAME_INVALID_URLS = "./data/No valid urls"
+FILE_NAME_NOT_ARTICLE_URLS = "./data/Not articles urls"
+FILE_NAME_TOO_MANY_RETRIES_URLS = "./data/Too many retries urls"
+FILE_NAME_PROMPT_ROLE_KEYS = "./data/role prompt_keys extraction.txt"
+file_manager = FileManager()
+file_manager.add_files([
+    FILE_NAME_INVALID_URLS,
+    FILE_NAME_NOT_ARTICLE_URLS,
+    FILE_NAME_TOO_MANY_RETRIES_URLS
+    ])
+# Dates and times
+TODAY_LOCAL_DATETIME = datetime.now().replace(tzinfo=timezone.utc)
+CURRENT_DATE, CURRENT_TIME = str(datetime.today()).split(" ")
+# Data structures
+ORDER_KEYS = ("title",
+              "body", 
+              "source",
+              "country",
+              "creation_datetime",
+              "modified_datetime",
+              "url",
+              "image",
+              "tags",
+              "n_tokens"
+              )
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
+}
+## Dynamical global variables
 openai.api_key = os.getenv("OPENAI_API_KEY")
-with open("./data/role prompt_keys extraction.txt", "r") as file:
+with open(FILE_NAME_PROMPT_ROLE_KEYS, "r") as file:
     prompt_role = file.read()
 prompt_role_summary_only = """
 You are a journalist who follows these guidelines:
@@ -79,53 +115,43 @@ node_ignore = ["europa",
                "prensadigital"
               ]
 
-## Constants
-SECONDS_IN_DAY = 86_400
-N_MAX_DAYS_OLD = 1
-FULL_START = True
-NUM_CORES = 10
-MAX_N_MEDIAS = 50
-N_SAVE_CHECKPOINT = 5
-# File names
-FILE_NAME_INVALID_URLS = "./data/No valid urls"
-FILE_NAME_NOT_ARTICLE_URLS = "./data/Not articles urls"
-FILE_NAME_TOO_MANY_RETRIES_URLS = "./data/Too many retries urls"
-# Dates and times
-TODAY_LOCAL_DATETIME = datetime.now().replace(tzinfo=timezone.utc)
-CURRENT_DATE, CURRENT_TIME = str(datetime.today()).split(" ")
-# Data structures
-ORDER_KEYS = ("title",
-              "body", 
-              "source",
-              "country",
-              "creation_datetime",
-              "modified_datetime",
-              "url",
-              "image",
-              "tags",
-              "n_tokens"
-              )
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
-}
-
-# Functions
-def extract_data_from_jsons(html, 
-                            url
-                            ):
-    data = {}
+## Functions
+def find_news_body_from_json(html: BeautifulSoup, 
+                             data: dict) -> dict:
     data["body"] = None
     data["n_tokens"] = 0
+    jsons = html.find_all("script", attrs={"type": re.compile("application[/]{1}ld[+]{1}json")})
+    for json_data_str in jsons:
+        json_data = json.loads(json_data_str.get_text(), strict=False)
+        if isinstance(json_data, list):
+            if json_data:
+                json_data = json_data[0]
+            else:
+                continue
+        if "articleBody" in json_data:
+            body, n_tokens = get_body_summary(remove_body_tags(json_data["articleBody"]))
+            data["body"] = body
+            data["n_tokens"] = n_tokens
+            break
+    return data
+
+def extract_data_from_jsons(html: BeautifulSoup, 
+                            url: str, 
+                            file: str="") -> tuple[dict, dict]:
+    data = {}
     keys_found = {}
     keys_found["title"] = False
     keys_found["body"] = False
     keys_found["tags"] = False
+    keys_found["type"] = False
     keys_found["creation_datetime"] = False
     keys_found["modified_datetime"] = False
     keys_found["image"] = False
-    type_key_found = False
-    invalid_web = False
     extraction_completed = False
+    data["body"] = None
+    data["n_tokens"] = 0
+    type_value = None
+    invalid_web = False
     jsons = html.find_all("script", 
                           attrs={"type": re.compile("application[/]{1}ld[+]{1}json")})
     for json_data_str in jsons:
@@ -139,98 +165,90 @@ def extract_data_from_jsons(html,
                                    strict=False)
         except Exception as e:
             print("JSON error:", e, "\n", url)
-        if isinstance(json_data, list):
+        if isinstance(json_data, (list, tuple)):
             if json_data:
                 json_data = json_data[0]
         for k, json_values in json_data.items():
-            if not keys_found.get("body", False) and "articleBody" in k:
-                body, n_tokens = get_body_summary(remove_body_tags(json_values))
+            if not keys_found["body"] and "articleBody" in k:
+                body, n_tokens = get_body_summary(remove_body_tags(json_data["articleBody"]))
                 data["body"] = body
                 data["n_tokens"] = n_tokens
                 keys_found["body"] = True
-            if not keys_found.get("type", False) and ("@type" in k or "type" in k):
+            if not keys_found["type"] and ("@type" in k or "type" in k):
                 if isinstance(json_values, list):
-                    for value in json_values:
+                    for value in json_data["@type"]:
                         type_value = value.lower()
                         if "media" in type_value:
                             invalid_web = True
                             break
                         if (type_value.startswith("news") or type_value.endswith("article")):
-                            type_key_found = True
+                            keys_found["type"] = True
                             break
                 elif isinstance(json_values, str):
                     type_value = json_values.lower()
                     if (type_value.startswith("news") or type_value.endswith("article")) and "media" not in type_value:
-                        type_key_found = True
+                        #print("Value without media?", type_value)
+                        keys_found["type"] = True
             if invalid_web:
+                print("Invalid web")
                 break
-            if not keys_found.get("creation_datetime", False) and "datePublished" in k:
+            if not keys_found["creation_datetime"] and "datePublished" in k:
                 data["creation_datetime"] = json_values
                 keys_found["creation_datetime"] = True
-            if not keys_found.get("modified_datetime", False) and "dateModified" in k:
+            if not keys_found["modified_datetime"] and "dateModified" in k:
                 data["modified_datetime"] = json_values
                 keys_found["modified_datetime"] = True
-            if not keys_found.get("title", False) and "headline" in k:
+            if not keys_found["title"] and "headline" in k:
                 data["title"] = json_values
                 keys_found["title"] = True
-            if not keys_found.get("tags", False) and ("keywords" in k or "tags" in k):
-                data["tags"] = json_values
+            if not keys_found["tags"] and ("keywords" in k or "tags" in k):
+                if json_values:
+                    data["tags"] = ";".join(json_values)
                 keys_found["tags"] = True
             if all(keys_found.values()):
                 extraction_completed = True
                 break
     # news_url is not a valid Article
-    if not type_key_found:
-        return {"key_value": None}, None
+    if not keys_found["type"]:
+        #print(f"Bad value from json in url:", url, end="", file=file)
+        #print(url, file=file)
+        return {"key_value": None}, {}
     return data, keys_found
 
-def extract_data_from_metadata(parsed_html, keys_found):
-    data = {}
+def extract_data_from_metadata(parsed_html: BeautifulSoup, 
+                               data: dict, 
+                               keys_found) -> tuple[dict, bool]:
     temp_keys_found = keys_found.copy()
-    target_keys = ("title", 
-                   "creation", 
-                   "publish", 
-                   "modified_datetime", 
-                   "tags", 
-                   "image")
-    meta_data = parsed_html.select("html head meta[property],[name]")
-
-    tags = []
-    for tag in meta_data:
-        attribute = tag.attrs.get("property", False)
+    meta_tags = parsed_html.select("html head meta[property],[name]")
+    for meta_tag in meta_tags:
         # Possible attributes:
-        # name
-        if not attribute:
-            attribute = tag.attrs["name"].lower()
         # property
-        else:
-            attribute = attribute.split(":")[-1].lower()
-        
-        attribute_content = tag.attrs.get("content", None)
-        if attribute_content is None:
-            continue
-        if attribute in target_keys:
-            if not temp_keys_found["tags"] and "keyword" in attribute:
-                data["tags"] = attribute_content
-                temp_keys_found["tags"] = True
-            if not temp_keys_found["creation_datetime"] and ("creation" in attribute or "publish" in attribute):
-                data["creation_datetime"] = attribute_content
-                temp_keys_found["creation_datetime"] = True
-            if not temp_keys_found["modified_datetime"] and "modified" in attribute:
-                data["modified_datetime"] = attribute_content
-                temp_keys_found["modified_datetime"] = True
-            if not temp_keys_found["title"] and "title" in attribute:
-                data["title"] = attribute_content
-                temp_keys_found["title"] = True
-            if temp_keys_found["image"] and "image" in attribute:
-                data["image"] = attribute_content
-                temp_keys_found["image"] = True
-        if all([value for key, value in temp_keys_found.items() if "body" not in key]):
+        attribute_val = meta_tag.attrs.get("property", False)
+        # name
+        if not attribute_val:
+            attribute_val = meta_tag.attrs["name"]
+        attribute_val = attribute_val.lower()
+        meta_content = meta_tag.attrs.get("content", None)
+        if not temp_keys_found["tags"] and "keyword" in attribute_val:
+            data["tags"] = meta_content.replace(", ", ";")
+            temp_keys_found["tags"] = True
+        if not temp_keys_found["creation_datetime"] and ("publish" in attribute_val and "time" in attribute_val):
+            data["creation_datetime"] = meta_content
+            temp_keys_found["creation_datetime"] = True
+        if not temp_keys_found["modified_datetime"] and ("modif" in attribute_val and "time" in attribute_val):
+            data["modified_datetime"] = meta_content
+            temp_keys_found["modified_datetime"] = True
+        if not temp_keys_found["title"] and "title" in attribute_val:
+            data["title"] = meta_content
+            temp_keys_found["title"] = True
+        if temp_keys_found["image"] and attribute_val.endswith("image"):
+            data["image"] = meta_content
+            temp_keys_found["image"] = True
+        if all([v for k, v in temp_keys_found.items() if "body" not in k]):
             break
-    data["tags"] = ";".join(tags)
-    return data, temp_keys_found
+    return data, temp_keys_found["title"]
 
-def extract_keys_with_gpt(parsed_code):
+def extract_keys_with_gpt(parsed_code: BeautifulSoup) -> dict:
     print("..Keys through gpt..")
     tags_with_text = parsed_code.find_all(lambda tag: (tag.name == "p" and not tag.attrs) or ("h" in tag.name and not tag.attrs))
     text_clean_from_tags = "".join([re.sub("\n+", "\n", tag.get_text()) for tag in tags_with_text])
@@ -278,28 +296,10 @@ def extract_keys_with_gpt(parsed_code):
     data["image"] = None
     return data
 
-def find_news_body_on_tags(html, data):
-    data["body"] = None
-    data["n_tokens"] = 0
-    jsons = html.find_all("script", attrs={"type": re.compile("application[/]{1}ld[+]{1}json")})
-    for json_data_str in jsons:
-        json_data = json.loads(json_data_str.get_text(), strict=False)
-        if isinstance(json_data, list):
-            if json_data:
-                json_data = json_data[0]
-            else:
-                continue
-        if "articleBody" in json_data:
-            body, n_tokens = get_body_summary(remove_body_tags(json_data["articleBody"]))
-            data["body"] = body
-            data["n_tokens"] = n_tokens
-            break
-    return data
-
-def remove_body_tags(text):
+def remove_body_tags(text: str) -> str:
     return re.sub("<.*?>", "", text)
 
-def find_news_body_with_gpt(url):
+def find_news_body_with_gpt(url: str) -> dict:
     print("..Body through gpt..")
     driver.get(url)
     driver.find_elements(By.XPATH, "html/body//p|h1|h2")
@@ -313,7 +313,7 @@ def find_news_body_with_gpt(url):
     }
     return data
 
-def get_body_summary(text):
+def get_body_summary(text: str) -> tuple[str, str]:
     openai_response = openai.ChatCompletion.create(
         model="gpt-3.5-turbo",
         messages=[
@@ -334,14 +334,16 @@ def get_body_summary(text):
 
 def treat_raw_news_urls(news_urls: list, 
                         media_url: str,
-                        pid: str
+                        pid: str,
+                        lock: multiprocessing.Lock
                         ):
     
     media_stats_reporter = StatisticsReporter()
     media_stats_reporter.restart_time()
-    urls = find_valid_news_urls(news_urls, 
+    urls = find_valid_news_urls(news_urls,
                                 media_url,
-                                pid)
+                                pid,
+                                lock)
     select_urls = pd.DataFrame(read_stored_news(media_url), 
                                columns=["url2"])
     extracted_urls = pd.DataFrame(urls, 
@@ -356,12 +358,26 @@ def treat_raw_news_urls(news_urls: list,
     news_to_process = extracted_urls.loc[are_new_news, "url1"].tolist()
     # Process new news
     processed_news_data, n_no_body = find_news_data(news_to_process, 
-                                                    media_url,
-                                                    pid=pid
-                                                    )
+                                                    author=media_url,
+                                                    pid=pid,
+                                                    lock=lock
+                                                    ) # unordered
+    n_processed = len(processed_news_data)
+    processed_news_data = order_dict_keys(processed_news_data, 
+                                          ("title", 
+                                           "body", 
+                                           "source",
+                                           "country",
+                                           "creation_datetime",
+                                           "modified_datetime",
+                                           "url",
+                                           "image",
+                                           "tags",
+                                           "n_tokens"
+                                           )
+                                           ) # ordered
     insert_news(processed_news_data)
     # Statistics
-    n_processed = len(processed_news_data)
     media_stats_reporter.write_extraction_stats((media_url, 
                                                  n_processed, 
                                                  n_no_body), 
@@ -373,132 +389,192 @@ def treat_raw_news_urls(news_urls: list,
         print(f"\tmedia name: {media_url} processed counts: {str(n_processed)}")
     return n_processed, n_no_body
 
-def find_valid_news_urls(news_urls, 
-                         media_url,
-                         pid: str
+def find_valid_news_urls(news_urls: list, 
+                         media_url: str, 
+                         pid: str,
+                         lock: multiprocessing.Lock
                          ) -> (list, bool):
     valid_news_urls = []
-    with open(FILE_NAME_INVALID_URLS + f"_{pid}" + ".txt", "w") as file_invalid:
-        for news_url in news_urls:
-            # Filter out urls with query symbols
-            if re.search("[?=&+%@#]{1}", news_url):
-                search_spec_char = re.search("[?=&+%@#]{1}", news_url)
-                query_start = search_spec_char.span()[0]
-                news_url = news_url[:query_start]
-            if news_url == media_url:
-                print(f"{news_url};find_valid_news_urls();continue_1", 
-                      file=file_invalid)
-                continue
-            if news_url.endswith(".xml") \
+    #with open(FILE_NAME_INVALID_URLS + f"_{pid}" + ".txt", "w") as file_invalid:
+    for news_url in news_urls:
+        # Filter out urls with query symbols
+        if re.search("[?=&+%@#]{1}", news_url):
+            search_spec_char = re.search("[?=&+%@#]{1}", news_url)
+            query_start = search_spec_char.span()[0]
+            news_url = news_url[:query_start]
+        if news_url == media_url:
+            #print(f"{news_url};find_valid_news_urls();continue_1", 
+            #        file=file_invalid)
+            file_manager.write_on_file(FILE_NAME_INVALID_URLS, 
+                                       [f"{news_url};find_valid_news_urls();continue_1"], 
+                                       lock, 
+                                       pid)
+            continue
+        if  news_url.endswith(".xml") \
             or news_url.endswith(".pdf") \
             or news_url.endswith(".lxml") \
             or news_url.endswith(".jpg") \
             or news_url.endswith(".png") \
             or news_url.endswith(".gif"):
-                print(f"{news_url};find_valid_news_urls();continue_2", 
-                      file=file_invalid)
+            #print(f"{news_url};find_valid_news_urls();continue_2", 
+            #        file=file_invalid)
+            file_manager.write_on_file(FILE_NAME_INVALID_URLS, 
+                                       [f"{news_url};find_valid_news_urls();continue_2"], 
+                                       lock, 
+                                       pid)
+            continue
+        if "pagina-1.html" in news_url or "/firmas" in news_url or "/humor/" in news_url or "/autor" in news_url or "/autores/" in news_url:
+            #print(f"{news_url};find_valid_news_urls();continue_3", 
+            #        file=file_invalid)
+            file_manager.write_on_file(FILE_NAME_INVALID_URLS, 
+                                       [f"{news_url};find_valid_news_urls();continue_3"], 
+                                       lock, 
+                                       pid)
+            continue
+        news_url_splits = [x for x in news_url.split("/") if x][2:]
+        if len(news_url_splits) <= 1:
+            #print(f"{news_url};find_valid_news_urls();continue_4", 
+            #        file=file_invalid)
+            file_manager.write_on_file(FILE_NAME_INVALID_URLS, 
+                                       [f"{news_url};find_valid_news_urls();continue_4"], 
+                                       lock, 
+                                       pid)
+            continue
+        elif len(news_url_splits) >= 2:
+            if re.search(r"^[.a-zA-Z0-9]+(-[.a-zA-Z0-9]+){,2}$", news_url_splits[-1]):
+                #print(f"{news_url};find_valid_news_urls();continue_5", 
+                #        file=file_invalid)
+                file_manager.write_on_file(FILE_NAME_INVALID_URLS, 
+                                       [f"{news_url};find_valid_news_urls();continue_5"], 
+                                       lock, 
+                                       pid)
                 continue
-            if "pagina-1.html" in news_url \
-            or "/firmas" in news_url \
-            or "/humor/" in news_url \
-            or "/autor/" in news_url \
-            or "/autores/" in news_url:
-                print(f"{news_url};find_valid_news_urls();continue_3", 
-                      file=file_invalid)
-                continue
-            news_url_splits = [x for x in news_url.split("/") if x][2:]
-            if len(news_url_splits) <= 1:
-                print(f"{news_url};find_valid_news_urls();continue_4", 
-                      file=file_invalid)
-                continue
-            elif len(news_url_splits) >= 2:
-                if re.search(r"^[.a-zA-Z0-9]+(-[.a-zA-Z0-9]+){,2}$", news_url_splits[-1]):
-                    print(f"{news_url};find_valid_news_urls();continue_5", 
-                          file=file_invalid)
-                    continue
-            if media_url[:-1] not in news_url:
-                print(f"{news_url};find_valid_news_urls();continue_6", 
-                      file=file_invalid)
-                continue
-            if re.search("https?:[\/]{2}", news_url):
-                valid_news_urls.append(news_url)
+        if media_url[:-1] not in news_url:
+            #print(f"{news_url};find_valid_news_urls();continue_6", 
+            #        file=file_invalid)
+            file_manager.write_on_file(FILE_NAME_INVALID_URLS, 
+                                       [f"{news_url};find_valid_news_urls();continue_6"], 
+                                       lock, 
+                                       pid)
+            continue
+        if re.search("https?:[\/]{2}", news_url):
+            #if news_url.endswith(".ht"):
+            #    news_url = news_url + "ml"
+            #elif news_url.endswith(".htm"):
+            #    news_url = news_url + "l"
+            valid_news_urls.append(news_url)
     return list(set(valid_news_urls))
 
 def find_news_data(news_urls: list, 
-                   author: str, 
-                   pid: str, 
-                   order_keys: bool=True):
+                   author: str,
+                   pid: str,
+                   lock: multiprocessing.Lock,
+                   order_keys: bool=True
+                   ):
     news_media_data = []
     n_no_articlebody_in_article = 0
-    with open(FILE_NAME_NOT_ARTICLE_URLS + f"_{pid}" + ".txt", "w") as file_no_articles, \
-         open(FILE_NAME_TOO_MANY_RETRIES_URLS + f"_{pid}" + ".txt", "w") as file_too_many_retries:
-        for news_url in news_urls:
-            try:
-                response = requests.get(news_url, 
-                                        headers=HEADERS)
-            except requests.exceptions.TooManyRedirects:
-                file_too_many_retries.write(news_url)
-            except requests.exceptions.RequestException as e:
-                print("An error occurred:", e)
-                file_too_many_retries.write(news_url)
-            parsed_news_hmtl = BeautifulSoup(response.content, 
-                                            "html.parser")
-            # Accept or reject url if news date is more than two days older
-            try:
-                meta_tag_published_time = parsed_news_hmtl.html.head.find("meta", 
-                                                                          attrs={"property": re.compile(r"publish(?:ed)?_?(?:time|date)")})
-                if meta_tag_published_time is None:
-                    #print("Time difference not calculated", meta_tag_published_time, ";", news_url)
-                    continue
-                publ_tsm = meta_tag_published_time.attrs["content"]
-                dtime_diff = (TODAY_LOCAL_DATETIME - datetime.fromisoformat(publ_tsm)).total_seconds() / SECONDS_IN_DAY
-                if dtime_diff > N_MAX_DAYS_OLD:
-                    continue
-            except:
-                #print("Time difference not calculated", meta_tag_published_time, ";", news_url)
-                pass
-            data = {}
-            data["creation_datetime"] = ""
-            data["modified_datetime"] = ""
-            try:
-                extracted_data, keys_found = extract_data_from_jsons(parsed_news_hmtl, 
-                                                                     news_url, 
-                                                                     file_no_articles)
-                # news_url is not a valid Article
-                if keys_found is None:
-                    continue
-                data.update(extracted_data)
-                data, keys_found, title_found, body_found = extract_data_from_metadata(parsed_news_hmtl, 
-                                                                                       data, 
-                                                                                       keys_found)
-                if not title_found:
-                    continue
-                data.update(extracted_data)
-                if not body_found:
-                    n_no_articlebody_in_article += 1
-                    data.update(find_news_body_with_gpt(parsed_news_hmtl))
-            except:
-                data = extract_keys_with_gpt(parsed_news_hmtl)
-            # Skip data element if neither title nor article were found, i.e. None value on both.
-            if data is None or (not title_found or not body_found):
+    #with open(FILE_NAME_NOT_ARTICLE_URLS + f"_{pid}" + ".txt", "w") as file_no_articles, \
+    #     open(FILE_NAME_TOO_MANY_RETRIES_URLS + f"_{pid}" + ".txt", "w") as file_too_many_retries:
+    for news_url in news_urls:
+        #print("Finding data for url:", f"(author: {author}) ", news_url)
+        #continue
+        try:
+            resp_url_news = requests.get(news_url, 
+                                         headers=HEADERS)
+        except requests.exceptions.TooManyRedirects:
+            #file_too_many_retries.write(news_url)
+            file_manager.write_on_file(FILE_NAME_TOO_MANY_RETRIES_URLS, 
+                                       [news_url], 
+                                       lock, 
+                                       pid)
+        except requests.exceptions.RequestException as e:
+            print("An error occurred:", e)
+            #file_too_many_retries.write(news_url)
+            file_manager.write_on_file(FILE_NAME_TOO_MANY_RETRIES_URLS, 
+                                       [news_url], 
+                                       lock, 
+                                       pid)
+        
+        parsed_news_hmtl = BeautifulSoup(resp_url_news.content, 
+                                        "html.parser")
+        # Accept or reject url if news date is more than N_MAX_DAYS_OLD days older
+        try:
+            meta_tag_published_time = parsed_news_hmtl.html.head.find("meta", 
+                                                                      attrs={"property": re.compile(r"publish(?:ed)?_?(?:time|date)")})
+            if meta_tag_published_time is None:
+                print("Time difference not calculated", meta_tag_published_time, ";", news_url)
                 continue
-            # Add other keys
-            data["country"] = parsed_news_hmtl.html.attrs.get("lang", "")
-            data["source"] = author
-            data["url"] = news_url
-            news_media_data.append(data)
-        # Order the keys
-        if order_keys:
-            news_media_data = order_dict_keys(news_media_data, 
-                                              ORDER_KEYS
-                                              ) 
+            publ_tsm = meta_tag_published_time.attrs["content"]
+            dtime_diff = (TODAY_LOCAL_DATETIME - datetime.fromisoformat(publ_tsm)).total_seconds() / SECONDS_IN_DAY
+            if dtime_diff > N_MAX_DAYS_OLD:
+                continue
+        except:
+            print("Time difference not calculated", meta_tag_published_time, ";", news_url)
+            pass
+        data = {}
+        data["creation_datetime"] = ""
+        data["modified_datetime"] = ""
+        
+        #try:
+        extracted_data, keys_found = extract_data_from_jsons(parsed_news_hmtl, 
+                                                             news_url
+                                                             #file_no_articles
+                                                            )
+        #print("from jsons:", extracted_data)
+        # news_url is not a valid Article
+        if not keys_found:
+            continue
+        data.update(extracted_data)
+        extracted_data, title_found = extract_data_from_metadata(parsed_news_hmtl, 
+                                                                 data, 
+                                                                 keys_found)
+        #print("from metadata:", extracted_data)
+        # @AUTHOR Update is not done on existing keys. The dict of filters, 'keys_found'
+        # avoids extraction of already found keys
+        data.update(extracted_data)
+        if not title_found:
+            print("No title", news_url)
+            continue
+        if not keys_found["body"]:
+            print("No body", news_url)
+            n_no_articlebody_in_article += 1
+            #continue
+            data.update(find_news_body_with_gpt(news_url))
+        #except:
+            #pass
+            #print("what happened", news_url)
+            #keys_found = {}
+            #keys_found["title"] = False
+            #keys_found["body"] = False
+                #data = extract_keys_with_gpt(parsed_news_hmtl)
+        # Skip data element if neither title nor article were found, i.e. None value on both.
+        if data is None or (not title_found or not keys_found["body"]):
+            print("nothing")
+            continue
+        #print("Ok", news_url)
+        #if not keys_found["tags"]:
+        #    elements_with_tags = parsed_news_hmtl.find_all("meta", 
+        #                                                   attrs={"name": "news_keywords"})
+        #    data["tags"] = [x.attrs["content"] for x in elements_with_tags]
+        #    data["tags"] = ";".join(data["tags"])
+        data["country"] = parsed_news_hmtl.html.attrs.get("lang", "")
+        # TODO complete this
+        data["source"] = author
+        data["url"] = news_url
+        news_media_data.append(data)
+    if order_keys:
+        news_media_data = order_dict_keys(news_media_data, 
+                                          ORDER_KEYS
+                                          ) 
     return news_media_data, n_no_articlebody_in_article
 
-def order_dict_keys(data, ord_keys, only_values=True):
+def order_dict_keys(data_container: list, 
+                    ord_keys: tuple, 
+                    only_values: bool=True):
     if only_values:
-        return [tuple(dict_elem[key] for key in ord_keys) for dict_elem in data]
+        return [tuple(data.get(k, "") for k in ord_keys) for data in data_container]
     else:
-        return [{key: dict_elem[key] for key in ord_keys} for dict_elem in data]
+        return [{k: data.get(k, "") for k in ord_keys} for data in data_container]
     
 def read_stored_news(where_params):
     create_news_table()
@@ -573,9 +649,11 @@ def insert_news(data):
     #print("data:\n", data)
     cursor.executemany(query_str, data)
 
-def split_file_and_process(sections_file_path, num_splits, process_function):
+def split_file_and_process(sections_file_path: str, 
+                           num_splits: int, 
+                           process_function):
     
-    # Split the input file into chunks
+    lock = multiprocessing.Lock()
     chunks = _split_files(sections_file_path, 
                           num_splits)
 
@@ -587,7 +665,10 @@ def split_file_and_process(sections_file_path, num_splits, process_function):
             split_file.write("\n".join(chunk))
 
         process = multiprocessing.Process(target=process_function, 
-                                          args=(chunk, str(i)))
+                                          args=(chunk, 
+                                                str(i), 
+                                                lock
+                                                ))
         processes.append(process)
         process.start()
 
@@ -601,7 +682,9 @@ def split_file_and_process(sections_file_path, num_splits, process_function):
         split_file_path = os.path.join("data", f"sections_split_{i}.txt")
         os.remove(split_file_path)
 
-def _split_files(file_path, n_splits):
+def _split_files(file_path: str, 
+                 n_splits: int
+                 ):
     # Split the input file into chunks
     sections = pd.read_csv(file_path, 
                            sep=";")
@@ -626,8 +709,9 @@ def _split_files(file_path, n_splits):
         chunks.append(subchanks)
     return chunks
 
-def main_multi_threading_process(sections_chunk, 
-                                 pid: str
+def main_multi_threading_process(sections_chunk: list, 
+                                 pid: str,
+                                 lock: multiprocessing.Lock
                                  ):
     # 1 Initialize reboot or not
     media_checkpoint = read_news_checkpoint(pid)
@@ -642,7 +726,8 @@ def main_multi_threading_process(sections_chunk,
     same_media_news_urls = []
     n_processed = 0
     n_no_body = 0
-    for i, row_section_and_media in enumerate(sections_chunk): 
+    for i, row_section_and_media in tqdm(enumerate(sections_chunk)):
+        #media = re.search("(https?://[^/]+/)", section_url).groups()[0]
         section_url, media = row_section_and_media.split(";")
         section_url = section_url.strip()
         if not media.startswith("https://"):
@@ -652,7 +737,7 @@ def main_multi_threading_process(sections_chunk,
                 checkpoint_started = False
             else:
                 continue
-            
+
         try:
             response = requests.get(section_url, 
                                     headers=HEADERS, 
@@ -664,18 +749,21 @@ def main_multi_threading_process(sections_chunk,
             continue
         except requests.exceptions.RequestException as e:
             # Handle other request exceptions
-            #Retrying request without 'www'
+            print(f"An error occurred: {str(e)}")
+            print("Retrying request without 'www'")
             section_url = section_url.replace("www.", "")
             response = requests.get(section_url, 
                                     headers=HEADERS, 
                                     timeout=10)
-            ErrorReporter(f"Get request general exception, {e}, at {section_url}")
+            #ErrorReporter(f"Get request general exception, {e}, at {section_url}")
             media = media.replace("www.", "")
+            print("Request success without 'www'")
 
         parsed_hmtl = BeautifulSoup(response.content, 
                                     "html.parser")
         tags_with_url = parsed_hmtl.find_all("a", 
                                              href=re.compile(r"^(?:https:\/\/)?|^\/{1}[^\/].*|^www[.].*"))
+                                             # href=re.compile("https?:.*"))
         news_urls = [x.attrs["href"] for x in tags_with_url if x.attrs.get("href", False)]
         clean_news_url = []
         for url in news_urls:
@@ -686,24 +774,25 @@ def main_multi_threading_process(sections_chunk,
             elif url.startswith("www.") or not url.startswith("https://"):
                 url = "https://" + url
             clean_news_url.append(url)
-
         if media != last_same_media and last_same_media:
             unique_same_media_urls = list(set(same_media_news_urls))
             n1, n2 = treat_raw_news_urls(unique_same_media_urls, 
                                          last_same_media,
-                                         str(pid)
+                                         str(pid),
+                                         lock
                                          )
             n_processed += n1
             n_no_body += n2
-        same_media_news_urls.extend(news_urls)
+            #same_media_urls = []
+        same_media_news_urls.extend(clean_news_url)
         if not checkpoint_started and (i % N_SAVE_CHECKPOINT == 0):
-            save_news_checkpoint(pid, 
-                                 last_same_media)
+            save_news_checkpoint(pid, last_same_media)
         last_same_media = media
     unique_same_media_urls = list(set(same_media_news_urls))
     n1, n2 = treat_raw_news_urls(unique_same_media_urls,
                                  last_same_media,
-                                 str(pid)
+                                 str(pid),
+                                 lock
                                  )
     n_processed += n1
     n_no_body += n2
@@ -714,6 +803,7 @@ def main_multi_threading_process(sections_chunk,
                                                 input_date=CURRENT_DATE,
                                                 input_time=CURRENT_TIME
                                                 )
+
 if __name__ == "__main__":
     print(f"\n...Datetime of process: {CURRENT_DATE} {CURRENT_TIME}...\n")
     if FULL_START:
@@ -729,4 +819,5 @@ if __name__ == "__main__":
                            NUM_CORES, 
                            main_multi_threading_process)
     conn.commit()
+    file_manager.close_all_files()
     print("\n...The process ended...")
