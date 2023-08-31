@@ -8,6 +8,7 @@ from datetime import datetime
 import time
 import multiprocessing
 
+PATH_DATA = os.path.join("..", "data")
 DIGITAL_MEDIAS_URL = "https://www.prensaescrita.com/prensadigital.php"
 DIGITAL_MEDIAS_MAIN_ROOT = "https://www.prensaescrita.com"
 DIGITAL_MEDIAS_URL = "https://www.prensaescrita.com/prensadigital.php"
@@ -61,15 +62,15 @@ def read_media_urls_file(file_path):
         return json.load(file)
 
 def save_news_checkpoint(pid, last_media_url):
-    with open(f"./data/extraction checkpoint_{pid}.json", "w") as file:
+    with open(os.path.join(PATH_DATA, f"extraction checkpoint_{pid}.json"), "w") as file:
         json.dump({"last_media_url": last_media_url}, file)
 def read_news_checkpoint(pid: str):
-    with open(f"./data/extraction checkpoint_{pid}.json", "r") as file:
+    with open(os.path.join(PATH_DATA, f"extraction checkpoint_{pid}.json"), "r") as file:
         data = json.load(file)
         return data["last_media_url"]
 
 def read_media_sections(pid: str):
-    with open(f"./data/media_sections_{pid}.txt", "r") as file:
+    with open(os.path.join(PATH_DATA, f"media_sections_{pid}.txt"), "r") as file:
         sections = file.readline()
         return sections
 
@@ -108,7 +109,7 @@ class StatisticsReporter():
                                pid: str=0, 
                                input_date="",
                                input_time="",
-                               main_folder="./scrapping statistics",
+                               main_folder=os.path.join(PATH_DATA, "scrapping-statistics"),
                                subfolder=""
                                ):
         if not input_date or not input_time:
