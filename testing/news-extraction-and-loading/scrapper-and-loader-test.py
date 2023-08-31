@@ -45,11 +45,11 @@ NUM_CORES = 10
 MAX_N_MEDIAS = 50
 N_SAVE_CHECKPOINT = 5
 # File names
-FILE_NAME_INVALID_URLS = "./data/No valid urls"
-FILE_NAME_NOT_ARTICLE_URLS = "./data/Not articles urls"
-FILE_NAME_TOO_MANY_RETRIES_URLS = "./data/Too many retries urls"
-FILE_NAME_PROMPT_ROLE_KEYS = "./data/role prompt_keys extraction.txt"
-DB_NAME_NEWS = "./data/news_db.sqlite3"
+FILE_NAME_INVALID_URLS = os.path.join(PATH_DATA, "No-valid-urls.txt")
+FILE_NAME_NOT_ARTICLE_URLS = os.path.join(PATH_DATA, "No-articles-urls.txt")
+FILE_NAME_TOO_MANY_RETRIES_URLS = os.path.join(PATH_DATA, "Too-many-retries-urls.txt")
+FILE_NAME_PROMPT_ROLE_KEYS = os.path.join(PATH_DATA, "role-prompt-keys-extraction.txt")
+DB_NAME_NEWS = os.path.join(PATH_DATA, "news_db.sqlite3")
 file_manager = FileManager()
 file_manager.add_files([
     FILE_NAME_INVALID_URLS,
@@ -117,7 +117,7 @@ node_ignore = ["europa",
 ## Functions
 def find_news_body_from_json(html: BeautifulSoup, 
                              data: dict) -> dict:
-    data["body"] = None
+    data["body"] = ""
     data["n_tokens"] = 0
     jsons = html.find_all("script", 
                           attrs={"type": re.compile("application[/]{1}ld[+]{1}json")})
@@ -138,20 +138,15 @@ def find_news_body_from_json(html: BeautifulSoup,
     return data
 
 def extract_data_from_jsons(html: BeautifulSoup, 
-                            url: str, 
-                            file: str="") -> tuple[dict, dict]:
-    data = {}
-    keys_found = {}
-    keys_found["title"] = False
-    keys_found["body"] = False
-    keys_found["tags"] = False
-    keys_found["type"] = False
-    keys_found["creation_datetime"] = False
-    keys_found["modified_datetime"] = False
-    keys_found["image"] = False
+                            url: str) -> tuple[dict, dict]:
+    data_extracted = {}
+    title_found = False
+    body_found = False
+    tags_found = False
+    type_found = False
+    creation_datetime_found = False
+    modified_datetime_found = False
     extraction_completed = False
-    data["body"] = None
-    data["n_tokens"] = 0
     type_value = None
     invalid_web = False
     jsons = html.find_all("script", 
@@ -171,14 +166,15 @@ def extract_data_from_jsons(html: BeautifulSoup,
             if json_data:
                 json_data = json_data[0]
         for k, json_values in json_data.items():
-            if not keys_found["body"] and "articleBody" in k:
+            if not body_found and "articleBody" in k:
+                print("Body found")
                 body, n_tokens = get_body_summary(remove_body_tags(json_data["articleBody"]))
                 #body = ""
                 #n_tokens = 0
-                data["body"] = body
-                data["n_tokens"] = n_tokens
-                keys_found["body"] = True
-            if not keys_found["type"] and ("@type" in k or "type" in k):
+                data_extracted["body"] = body
+                data_extracted["n_tokens"] = n_tokens
+                body_found = True
+            if not type_found and ("@type" in k or "type" in k):
                 if isinstance(json_values, list):
                     for value in json_data["@type"]:
                         type_value = value.lower()
@@ -186,71 +182,116 @@ def extract_data_from_jsons(html: BeautifulSoup,
                             invalid_web = True
                             break
                         if (type_value.startswith("news") or type_value.endswith("article")):
-                            keys_found["type"] = True
+                            type_found = True
                             break
                 elif isinstance(json_values, str):
                     type_value = json_values.lower()
                     if (type_value.startswith("news") or type_value.endswith("article")) and "media" not in type_value:
                         #print("Value without media?", type_value)
-                        keys_found["type"] = True
+                        type_found = True
             if invalid_web:
                 print("Invalid web")
                 break
-            if not keys_found["creation_datetime"] and "datePublished" in k:
-                data["creation_datetime"] = json_values
-                keys_found["creation_datetime"] = True
-            if not keys_found["modified_datetime"] and "dateModified" in k:
-                data["modified_datetime"] = json_values
-                keys_found["modified_datetime"] = True
-            if not keys_found["title"] and "headline" in k:
-                data["title"] = json_values
-                keys_found["title"] = True
-            if not keys_found["tags"] and ("keywords" in k or "tags" in k):
-                if json_values and isinstance(json_values, (tuple, list)):
-                    data["tags"] = ";".join(json_values)
-                keys_found["tags"] = True
-            if all(keys_found.values()):
+            if not creation_datetime_found and "datePublished" in k:
+                data_extracted["creation_datetime"] = json_values
+                creation_datetime_found = True
+            if not modified_datetime_found and "dateModified" in k:
+                data_extracted["modified_datetime"] = json_values
+                modified_datetime_found = True
+            if not title_found == "headline" in k:
+                data_extracted["title"] = json_values
+                title_found = True
+            if not tags_found and ("keywords" in k or "tags" in k):
+                if not json_values:
+                    continue
+                if isinstance(json_values, (tuple, list)):
+                    data_extracted["tags"] = ";".join(json_values)
+                elif isinstance(json_values, str):
+                    if ", " in json_values:
+                        data_extracted["tags"] = json_values.replace(", ", ",")
+                    else:
+                        data_extracted["tags"] = json_values
+                else:
+                    continue
+                tags_found = True
+            if all((title_found, 
+                    body_found,
+                    creation_datetime_found,
+                    modified_datetime_found,
+                    tags_found,
+                    )):
                 extraction_completed = True
                 break
-    # news_url is not a valid Article
-    if not keys_found["type"]:
-        #print(f"Bad value from json in url:", url, end="", file=file)
-        #print(url, file=file)
-        return {}, {}
-    return data, keys_found
+    if not type_found:
+        return {}
+    return data_extracted
 
 def extract_data_from_metadata(parsed_html: BeautifulSoup, 
-                               data: dict, 
-                               keys_found) -> tuple[dict, bool]:
-    temp_keys_found = keys_found.copy()
+                               data_input: dict) -> tuple[dict, bool]:
+    data_extacted = {}
+    image_found = False
+    if data_input.get("title", False):
+        title_found = True
+    else:
+        title_found = False
+    if data_input.get("creation_datetime", False):
+        creation_datetime_found = True
+    else:
+        creation_datetime_found = False
+    if data_input.get("modified_datetime", False):
+        modified_datetime_found = True
+    else:
+        modified_datetime_found = False
+    if data_input.get("tags", False):
+        tags_found = True
+    else:
+        tags_found = False
+
+    extraction_completed = False
     meta_tags = parsed_html.select("html head meta[property],[name]")
     for meta_tag in meta_tags:
+        if extraction_completed:
+            break
         # Possible attributes:
         # property
-        attribute_val = meta_tag.attrs.get("property", False)
+        attribute_val = meta_tag.attrs.get("property", "")
         # name
         if not attribute_val:
-            attribute_val = meta_tag.attrs["name"]
+            attribute_val = meta_tag.attrs.get("name", "")
+            if not attribute_val:
+                continue
         attribute_val = attribute_val.lower()
-        meta_content = meta_tag.attrs.get("content", None)
-        if not temp_keys_found["tags"] and "keyword" in attribute_val:
-            data["tags"] = meta_content.replace(", ", ";")
-            temp_keys_found["tags"] = True
-        if not temp_keys_found["creation_datetime"] and ("publish" in attribute_val and "time" in attribute_val):
-            data["creation_datetime"] = meta_content
-            temp_keys_found["creation_datetime"] = True
-        if not temp_keys_found["modified_datetime"] and ("modif" in attribute_val and "time" in attribute_val):
-            data["modified_datetime"] = meta_content
-            temp_keys_found["modified_datetime"] = True
-        if not temp_keys_found["title"] and "title" in attribute_val:
-            data["title"] = meta_content
-            temp_keys_found["title"] = True
-        if temp_keys_found["image"] and attribute_val.endswith("image"):
-            data["image"] = meta_content
-            temp_keys_found["image"] = True
-        if all([v for k, v in temp_keys_found.items() if "body" not in k]):
-            break
-    return data, temp_keys_found["title"], temp_keys_found["creation_datetime"]
+        meta_content = meta_tag.attrs.get("content", "")
+        if not meta_content:
+            continue
+        if not title_found and "title" in attribute_val:
+            data_extacted["title"] = meta_content
+            title_found = True
+        #if not creation_datetime_found and ("publish" in attribute_val and "time" in attribute_val):
+        if not creation_datetime_found and re.search(r"publish(?:ed)?_?(?:time|date)", attribute_val):
+            data_extacted["creation_datetime"] = meta_content
+            creation_datetime_found = True
+        if not tags_found and "keyword" in attribute_val:
+            if ", " in meta_content:
+                data_extacted["tags"] = meta_content.replace(", ", ",")
+            else:
+                data_extacted["tags"] = meta_content
+            tags_found = True
+        #if not modified_datetime_found and ("modif" in attribute_val and "time" in attribute_val):
+        if not modified_datetime_found and re.search(r"modif(?:ied)?_?(?:time|date)", attribute_val):
+            data_extacted["modified_datetime"] = meta_content
+            modified_datetime_found = True
+        if not image_found and attribute_val.endswith("image"):
+            data_extacted["image"] = meta_content
+            image_found = True
+        if all((title_found, 
+                creation_datetime_found,
+                modified_datetime_found,
+                tags_found,
+                image_found
+                )):
+            extraction_completed = True
+    return data_extacted
 
 def extract_keys_with_gpt(parsed_code: BeautifulSoup) -> dict:
     print("..Keys through gpt..")
@@ -281,23 +322,23 @@ def extract_keys_with_gpt(parsed_code: BeautifulSoup) -> dict:
         try:
             title = regex_headline.search(message_content).groups()[0]
         except:
-            title = None
+            title = ""
         try:
             tags = regex_topics.search(message_content).groups()[0]
         except:
-            tags = None
+            tags = ""
         try:
             creation_datetime = regex_creation_datetime.search(message_content).groups()[0]
         except:
-            creation_datetime = None
+            creation_datetime = ""
         try:
             modified_datetime = regex_update_datetime.search(message_content).groups()[0]
         except:
-            modified_datetime = None
+            modified_datetime = ""
         try:
             body = regex_only_summary.search(message_content).groups()[0]
         except:
-            body = None
+            body = ""
         data = {
             "n_tokens": n_tokens,
             "title": title,
@@ -306,11 +347,12 @@ def extract_keys_with_gpt(parsed_code: BeautifulSoup) -> dict:
             "modified_datetime": modified_datetime,
             "body": body
             }
-        data["image"] = None
-    else:
-        data = {}
-    return data
+        data["image"] = ""
 
+        return data
+    else:
+        return {}
+    
 def remove_body_tags(text: str) -> str:
     return re.sub("<.*?>", "", text)
 
@@ -331,6 +373,8 @@ def find_news_body_with_gpt(url: str) -> dict:
     return data
 
 def get_body_summary(text: str) -> tuple[str, str]:
+    ok = False
+    return "actually empty", 0
     try:
         openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -339,18 +383,23 @@ def get_body_summary(text: str) -> tuple[str, str]:
                 {"role": "user", "content": text},
             ]
         )
+        ok = True
     except Exception as e:
         print("Summary GPT error:", e)
-    message_content = openai_response["choices"][0].message["content"]
-    try:
-        n_tokens = regex_n_tokens.search(message_content).groups()[0]
-    except:
-        n_tokens = 0
-    try:
-        body_summary = regex_only_summary.search(message_content).groups()[0]
-    except:
-        body_summary = None
-    return body_summary, n_tokens
+    
+    if ok:
+        message_content = openai_response["choices"][0].message["content"]
+        try:
+            n_tokens = regex_n_tokens.search(message_content).groups()[0]
+        except:
+            n_tokens = 0
+        try:
+            body_summary = regex_only_summary.search(message_content).groups()[0]
+        except:
+            body_summary = ""
+        return body_summary, n_tokens
+    else:
+        return "", 0
 
 def treat_raw_news_urls(news_urls: list, 
                         media_url: str,
@@ -543,53 +592,36 @@ def find_news_data(news_urls: list,
                 continue
         except:
             print("Time difference not calculated", meta_tag_published_time, ";", news_url)
-            pass
+            continue
         data = {}
         #data["creation_datetime"] = ""
         #data["modified_datetime"] = ""
         
         #try:
-        extracted_data, keys_found = extract_data_from_jsons(parsed_news_hmtl, 
-                                                             news_url
-                                                             #file_no_articles
-                                                            )
-        #print("from jsons:", extracted_data)
-        # news_url is not a valid Article
-        if not keys_found["title"] or not keys_found["creation_datetime"]:
-            continue
+        extracted_data = extract_data_from_jsons(parsed_news_hmtl, 
+                                                 news_url
+                                                 )
         data.update(extracted_data)
-        extracted_data, title_found, creation_datetime_found = extract_data_from_metadata(parsed_news_hmtl, 
-                                                                                          data, 
-                                                                                          keys_found)
+        extracted_data = extract_data_from_metadata(parsed_news_hmtl, 
+                                                    data
+                                                    )
+        data.update(extracted_data)
         #print("from metadata:", extracted_data)
-        # @AUTHOR Update is not done on existing keys. The dict of filters 'keys_found'
-        # avoids extraction of already found keys
-        if not title_found or not creation_datetime_found:
-            print("No title", news_url)
+        if not data.get("title", False) or not extracted_data.get("creation_datetime", False):
+            print("1. No title", news_url, extracted_data)
             continue
-        if not keys_found["body"]:
-            print("No body", news_url)
+        #else:
+        #    print("2. Title Found", news_url, extracted_data)
+        if not data.get("body", False):
+            print("No body, find from html tags with gpt", news_url)
             n_no_articlebody_in_article += 1
-            #continue
             data.update(find_news_body_with_gpt(news_url))
-        #except:
-            #pass
-            #print("what happened", news_url)
-            #keys_found = {}
-            #keys_found["title"] = False
-            #keys_found["body"] = False
-        if not keys_found["body"]:
-            data = extract_keys_with_gpt(parsed_news_hmtl)
-        # Skip data element if neither title nor article were found, i.e. None value on both.
-        if not data or not keys_found["body"]:
-            print("nothing")
-            continue
-        #print("Ok", news_url)
-        #if not keys_found["tags"]:
-        #    elements_with_tags = parsed_news_hmtl.find_all("meta", 
-        #                                                   attrs={"name": "news_keywords"})
-        #    data["tags"] = [x.attrs["content"] for x in elements_with_tags]
-        #    data["tags"] = ";".join(data["tags"])
+        #if not extracted_data.get("body", False):
+        #    data = extract_keys_with_gpt(parsed_news_hmtl)
+        #if not extracted_data.get("body", False):
+        #    print("nothing")
+        #    continue
+
         data["country"] = parsed_news_hmtl.html.attrs.get("lang", "")
         # TODO complete this
         data["source"] = author
@@ -701,7 +733,7 @@ def split_file_and_process(sections_file_path: str,
     # Create a process for each chunk and run in parallel
     processes = []
     for i, chunk in enumerate(chunks):
-        split_file_path = os.path.join("data", f"sections_split_{i}.txt")  
+        split_file_path = os.path.join(PATH_DATA, f"sections_split_{i}.txt")  
         with open(split_file_path, 'w') as split_file:
             split_file.write("\n".join(chunk))
 
@@ -851,9 +883,9 @@ if __name__ == "__main__":
             save_news_checkpoint(str(i), "")
 
     # Extract the last version
-    version_n = max(int(x.split("_")[-1][1:-4]) for x in glob.glob("./data/final_url_sections_v*.csv"))
+    version_n = max(int(x.split("_")[-1][1:-4]) for x in glob.glob("../data/final_url_sections_v*.csv"))
     sections_file_path = f"final_url_sections_v{version_n}.csv"
-    file_path = os.path.join(".", "data", sections_file_path)
+    file_path = os.path.join(PATH_DATA, sections_file_path)
 
     split_file_and_process(file_path, 
                            NUM_CORES, 
