@@ -14,37 +14,37 @@ La Voz de Galicia;lavozdegalicia.es
 Libertad Digital;libertaddigital.com
 Crónica global;cronicaglobal.elespanol.com
 El Correo Español;elcorreo.com
-Diario de Sevilla;diariodesevilla.es
 SUR;diariosur.es
+Diario de Sevilla;diariodesevilla.es
 El Diario Vasco;diariovasco.com
 Huffington Post España;huffingtonpost.es
 Levante;levante-emv.com
 Las Provincias;lasprovincias.es
 La Verdad;laverdad.es
-Vilaweb;vilaweb.cat
 Heraldo de Aragón;heraldo.es
 Faro de Vigo;farodevigo.es
 Ideal;ideal.es
 El Periódico de España;epe.es
 Publico;publico.es
 Diario de Mallorca;diariodemallorca.es
-La Información;lainformacion.com
-Periodista Digital;periodistadigital.com
 Canarias 7;canarias7.es
+La Información;lainformacion.com
 OK Diario;okdiario.com
+Periodista Digital;periodistadigital.com
 DEIA;deia.eus
-Ara;ara.cat
 El Comercio;elcomercio.es
 Hoy de Badajoz;hoy.es
 La Nueva España;lne.es
-Diario de Cádiz;diariodecadiz.es
-El Diario Montañes;eldiariomontanes.es
 Información;informacion.es
-República;republica.com
+El Diario Montañes;eldiariomontanes.es
+Diario de Cádiz;diariodecadiz.es
 La Rioja;larioja.com
-Última Hora;ultimahora.es
+República;republica.com
 Diario de Noticias;noticiasdenavarra.com
+Última Hora;ultimahora.es
 El Plural;elplural.com
 El Correo Gallego;elcorreogallego.es
 El Periódico de Aragón;elperiodicodearagon.com
+El Día;eldia.es
 Diario de Córdoba;diariocordoba.com
+El Confidencial Digital;elconfidencialdigital.com
