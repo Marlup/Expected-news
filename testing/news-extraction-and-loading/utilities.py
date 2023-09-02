@@ -8,7 +8,7 @@ from datetime import datetime
 import time
 import multiprocessing
 
-PATH_DATA = os.path.join("..", "data")
+PATH_DATA = "../data"
 DIGITAL_MEDIAS_URL = "https://www.prensaescrita.com/prensadigital.php"
 DIGITAL_MEDIAS_MAIN_ROOT = "https://www.prensaescrita.com"
 DIGITAL_MEDIAS_URL = "https://www.prensaescrita.com/prensadigital.php"
@@ -139,29 +139,42 @@ class FileManager():
         self.files_map = {}
     def add_files(self, 
                   files: list, 
-                  open_mode: str="w"
+                  **kwargs
                   ):
         for file_name in files:
             self._add_file(file_name, 
-                           open_mode)
+                           kwargs)
+    
     def _add_file(self, 
                   file_name: str,
-                  open_mode="w"
+                  **kwargs
                   ):
+        if kwargs.get("open_mode", False):
+            open_mode = kwargs["open_mode"]
+        else:
+            open_mode = "a"
+        
         self.files_map[file_name] = open(file_name, open_mode)
     def write_on_file(self, 
                       file_name: str,
-                      data: list, 
+                      msgs: list, 
                       lock: multiprocessing.Lock,
                       pid: str=""
                       ):
+        
         with lock:
-            if len(data) == 1:
-                self.files_map[file_name].write(data[0] + ";" + pid + "\n")
-            elif len(data) > 1:
-                self.files_map[file_name].write(";".join([str(x) for x in data] + [pid, 
-                                                                                   "\n"]))
+            for msg in msgs:
+                self._write_on_file(file_name, 
+                                    msg, 
+                                    pid)
+    
+    def _write_on_file(self, 
+                       file_name: str,
+                       msg: list[str], 
+                       pid: str=""
+                       ):
+        if len(msg) > 1:
+            self.files_map[file_name].write(f"{msg};{pid}\n")
     def close_all_files(self):
         for file in self.files_map.values():
             file.close()
-            

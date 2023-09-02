@@ -38,24 +38,29 @@ class ErrorReporter(Exception):
         with open("Errors log.txt", "w") as errors_file:
             errors_file.write(message)
 ## Constants
+FULL_START = True
+BLOCK_API_CALL = False
 SECONDS_IN_DAY = 86_400
 N_MAX_DAYS_OLD = 1
-FULL_START = True
 NUM_CORES = 10
 MAX_N_MEDIAS = 50
 N_SAVE_CHECKPOINT = 5
 # File names
-FILE_NAME_INVALID_URLS = os.path.join(PATH_DATA, "No-valid-urls.txt")
-FILE_NAME_NOT_ARTICLE_URLS = os.path.join(PATH_DATA, "No-articles-urls.txt")
-FILE_NAME_TOO_MANY_RETRIES_URLS = os.path.join(PATH_DATA, "Too-many-retries-urls.txt")
+PATH_DATA = os.path.join("..", "data")
+#FILE_NAME_GPT_API_ERROR = os.path.join(PATH_DATA, "gpt-api-errors.txt")
+#FILE_NAME_INVALID_URLS = os.path.join(PATH_DATA, "No-valid-urls.txt")
+#FILE_NAME_NOT_ARTICLE_URLS = os.path.join(PATH_DATA, "No-articles-urls.txt")
+#FILE_NAME_TOO_MANY_RETRIES_URLS = os.path.join(PATH_DATA, "Too-many-retries-urls.txt")
+FILE_NAME_EXTRACTION_ERRORS = os.path.join(PATH_DATA, "extraction-errors.txt")
 FILE_NAME_PROMPT_ROLE_KEYS = os.path.join(PATH_DATA, "role-prompt-keys-extraction.txt")
-DB_NAME_NEWS = os.path.join(PATH_DATA, "news_db.sqlite3")
+# Database names
+# Managers instantiation
 file_manager = FileManager()
 file_manager.add_files([
-    FILE_NAME_INVALID_URLS,
-    FILE_NAME_NOT_ARTICLE_URLS,
-    FILE_NAME_TOO_MANY_RETRIES_URLS
+    FILE_NAME_EXTRACTION_ERRORS
     ])
+
+DB_NAME_NEWS = os.path.join(PATH_DATA, "news_db.sqlite3")
 # Dates and times
 TODAY_LOCAL_DATETIME = datetime.now().replace(tzinfo=timezone.utc)
 CURRENT_DATE, CURRENT_TIME = str(datetime.today()).split(" ")
@@ -114,6 +119,25 @@ node_ignore = ["europa",
                "prensadigital"
               ]
 
+## Decorators
+# Decorator function to handle inputs and error logging
+def error_logger(manager: FileManager,
+                 file_name: str
+                 ):
+    def decorator(target_func):
+        def wrapper(*args, **kwargs):
+            data, success = target_func(*args, **kwargs)
+            print("Collectors from target func:", args, kwargs)
+            if not success:
+                manager.write_on_file(file_name,
+                                      error_msgs,
+                                      lock,
+                                      pid,
+                                      )
+            return data
+        return wrapper
+    return decorator
+
 ## Functions
 def find_news_body_from_json(html: BeautifulSoup, 
                              data: dict) -> dict:
@@ -129,16 +153,19 @@ def find_news_body_from_json(html: BeautifulSoup,
             else:
                 continue
         if "articleBody" in json_data:
-            body, n_tokens = get_body_summary(remove_body_tags(json_data["articleBody"]))
+            body, n_tokens, success = get_body_summary(remove_body_tags(json_data["articleBody"]))
             #body = ""
             #n_tokens = 0
             data["body"] = body
             data["n_tokens"] = n_tokens
             break
-    return data
+    return data, success
 
+@error_logger(file_manager, FILE_NAME_EXTRACTION_ERRORS)
 def extract_data_from_jsons(html: BeautifulSoup, 
-                            url: str) -> tuple[dict, dict]:
+                            url: str,
+                            only_article_body: bool=True 
+                            ) -> tuple[dict, dict]:
     data_extracted = {}
     title_found = False
     body_found = False
@@ -147,6 +174,7 @@ def extract_data_from_jsons(html: BeautifulSoup,
     creation_datetime_found = False
     modified_datetime_found = False
     extraction_completed = False
+    body_summary_success = False
     type_value = None
     invalid_web = False
     jsons = html.find_all("script", 
@@ -168,12 +196,13 @@ def extract_data_from_jsons(html: BeautifulSoup,
         for k, json_values in json_data.items():
             if not body_found and "articleBody" in k:
                 print("Body found")
-                body, n_tokens = get_body_summary(remove_body_tags(json_data["articleBody"]))
+                body, n_tokens, body_summary_success = get_body_summary(remove_body_tags(json_data["articleBody"]))
                 #body = ""
                 #n_tokens = 0
                 data_extracted["body"] = body
                 data_extracted["n_tokens"] = n_tokens
                 body_found = True
+
             if not type_found and ("@type" in k or "type" in k):
                 if isinstance(json_values, list):
                     for value in json_data["@type"]:
@@ -192,6 +221,10 @@ def extract_data_from_jsons(html: BeautifulSoup,
             if invalid_web:
                 print("Invalid web")
                 break
+            if only_article_body:
+                if body_found:
+                    extraction_completed = True
+                continue
             if not creation_datetime_found and "datePublished" in k:
                 data_extracted["creation_datetime"] = json_values
                 creation_datetime_found = True
@@ -223,8 +256,8 @@ def extract_data_from_jsons(html: BeautifulSoup,
                 extraction_completed = True
                 break
     if not type_found:
-        return {}
-    return data_extracted
+        return {}, False
+    return data_extracted, body_summary_success
 
 def extract_data_from_metadata(parsed_html: BeautifulSoup, 
                                data_input: dict) -> tuple[dict, bool]:
@@ -356,13 +389,13 @@ def extract_keys_with_gpt(parsed_code: BeautifulSoup) -> dict:
 def remove_body_tags(text: str) -> str:
     return re.sub("<.*?>", "", text)
 
-def find_news_body_with_gpt(url: str) -> dict:
+def find_news_body_with_gpt(parsed_html: BeautifulSoup) -> dict:
     print("..Body through gpt..")
-    driver.get(url)
-    driver.find_elements(By.XPATH, "html/body//p|h1|h2")
-    paragraphs = driver.find_elements(By.XPATH, "html/body//div/p|h1|h2")
-    parag_texts = str({i: x.text if x.text else "\n" for i, x in enumerate(paragraphs)})[1:-1]
-    body, n_tokens = get_body_summary(parag_texts)
+    tags_with_text = parsed_html.html.body.find_all(lambda tag: tag.name in ("p", "h1", "h2"))
+    clean_paragraphs = "".join([re.sub("\n+", "\n", tag.get_text()) for tag in tags_with_text])
+    clean_paragraphs = clean_paragraphs.split("\n")[0]
+    parag_texts = str({i: x if x else "\n" for i, x in enumerate(clean_paragraphs)})[1:-1]
+    body, n_tokens, success = get_body_summary(parag_texts)
     #body = ""
     #n_tokens = 0
 
@@ -370,11 +403,12 @@ def find_news_body_with_gpt(url: str) -> dict:
         "n_tokens": n_tokens,
         "body": body
     }
-    return data
+    return data, success
 
 def get_body_summary(text: str) -> tuple[str, str]:
+    if BLOCK_API_CALL:
+        return "The admin blanked the summary", 0, True
     ok = False
-    return "actually empty", 0
     try:
         openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -397,9 +431,9 @@ def get_body_summary(text: str) -> tuple[str, str]:
             body_summary = regex_only_summary.search(message_content).groups()[0]
         except:
             body_summary = ""
-        return body_summary, n_tokens
+        return body_summary, n_tokens, ok
     else:
-        return "", 0
+        return "", 0, ok
 
 def treat_raw_news_urls(news_urls: list, 
                         media_url: str,
@@ -446,12 +480,14 @@ def treat_raw_news_urls(news_urls: list,
         print(f"\tmedia name: {media_url} processed counts: {str(n_processed)}")
     return n_processed, n_no_body
 
+@error_logger(file_manager,  FILE_NAME_EXTRACTION_ERRORS)
 def find_valid_news_urls(news_urls: list, 
                          media_url: str, 
-                         pid: str,
-                         lock: multiprocessing.Lock
+                         *args,
+                         **kwargs
                          ) -> (list, bool):
     valid_news_urls = []
+    error_msgs = []
     #with open(FILE_NAME_INVALID_URLS + f"_{pid}" + ".txt", "w") as file_invalid:
     for news_url in news_urls:
         # Filter out urls with query symbols
@@ -460,12 +496,7 @@ def find_valid_news_urls(news_urls: list,
             query_start = search_spec_char.span()[0]
             news_url = news_url[:query_start]
         if news_url == media_url:
-            #print(f"{news_url};find_valid_news_urls();continue_1", 
-            #        file=file_invalid)
-            file_manager.write_on_file(FILE_NAME_INVALID_URLS, 
-                                       [f"{news_url};find_valid_news_urls();continue_1"], 
-                                       lock, 
-                                       pid)
+            error_msgs.append(f"error-code-3.1;{news_url}")
             continue
         if  news_url.endswith(".xml") \
             or news_url.endswith(".pdf") \
@@ -473,54 +504,31 @@ def find_valid_news_urls(news_urls: list,
             or news_url.endswith(".jpg") \
             or news_url.endswith(".png") \
             or news_url.endswith(".gif"):
-            #print(f"{news_url};find_valid_news_urls();continue_2", 
-            #        file=file_invalid)
-            file_manager.write_on_file(FILE_NAME_INVALID_URLS, 
-                                       [f"{news_url};find_valid_news_urls();continue_2"], 
-                                       lock, 
-                                       pid)
+            error_msgs.append(f"error-code-3.2;{news_url}")
             continue
-        if "pagina-1.html" in news_url or "/firmas" in news_url or "/humor/" in news_url or "/autor" in news_url or "/autores/" in news_url:
-            #print(f"{news_url};find_valid_news_urls();continue_3", 
-            #        file=file_invalid)
-            file_manager.write_on_file(FILE_NAME_INVALID_URLS, 
-                                       [f"{news_url};find_valid_news_urls();continue_3"], 
-                                       lock, 
-                                       pid)
+        if "pagina-1.html" in news_url \
+            or "/firmas" in news_url \
+            or "/humor/" in news_url \
+            or "/autor" in news_url \
+            or "/autores/" in news_url \
+            or "/video/" in news_url \
+            or "/videos/" in news_url:
+            error_msgs.append(f"error-code-3.3;{news_url}")
             continue
         news_url_splits = [x for x in news_url.split("/") if x][2:]
         if len(news_url_splits) <= 1:
-            #print(f"{news_url};find_valid_news_urls();continue_4", 
-            #        file=file_invalid)
-            file_manager.write_on_file(FILE_NAME_INVALID_URLS, 
-                                       [f"{news_url};find_valid_news_urls();continue_4"], 
-                                       lock, 
-                                       pid)
+            error_msgs.append(f"error-code-3.4;{news_url}")
             continue
         elif len(news_url_splits) >= 2:
             if re.search(r"^[.a-zA-Z0-9]+(-[.a-zA-Z0-9]+){,2}$", news_url_splits[-1]):
-                #print(f"{news_url};find_valid_news_urls();continue_5", 
-                #        file=file_invalid)
-                file_manager.write_on_file(FILE_NAME_INVALID_URLS, 
-                                       [f"{news_url};find_valid_news_urls();continue_5"], 
-                                       lock, 
-                                       pid)
+                error_msgs.append(f"error-code-3.5;{news_url}")
                 continue
         if media_url[:-1] not in news_url:
-            #print(f"{news_url};find_valid_news_urls();continue_6", 
-            #        file=file_invalid)
-            file_manager.write_on_file(FILE_NAME_INVALID_URLS, 
-                                       [f"{news_url};find_valid_news_urls();continue_6"], 
-                                       lock, 
-                                       pid)
+            error_msgs.append(f"error-code-3.6;{news_url}")
             continue
         if re.search("https?:[\/]{2}", news_url):
-            #if news_url.endswith(".ht"):
-            #    news_url = news_url + "ml"
-            #elif news_url.endswith(".htm"):
-            #    news_url = news_url + "l"
             valid_news_urls.append(news_url)
-    return list(set(valid_news_urls))
+    return list(set(valid_news_urls)), error_msgs
 
 
 
@@ -607,7 +615,7 @@ def find_news_data(news_urls: list,
                                                     )
         data.update(extracted_data)
         #print("from metadata:", extracted_data)
-        if not data.get("title", False) or not extracted_data.get("creation_datetime", False):
+        if not data.get("title", False) or not data.get("creation_datetime", False):
             print("1. No title", news_url, extracted_data)
             continue
         #else:
@@ -615,7 +623,14 @@ def find_news_data(news_urls: list,
         if not data.get("body", False):
             print("No body, find from html tags with gpt", news_url)
             n_no_articlebody_in_article += 1
-            data.update(find_news_body_with_gpt(news_url))
+            extracted_data, summary_success = find_news_body_with_gpt(parsed_news_hmtl)
+            if not summary_success:
+                file_manager.write_on_file(FILE_NAME_GPT_API_ERROR, 
+                                           [news_url],
+                                           lock,
+                                           pid
+                                           )
+            data.update(find_news_body_with_gpt(parsed_news_hmtl))
         #if not extracted_data.get("body", False):
         #    data = extract_keys_with_gpt(parsed_news_hmtl)
         #if not extracted_data.get("body", False):
@@ -635,7 +650,7 @@ def find_news_data(news_urls: list,
 def order_dict_keys(data_container: list[dict], 
                     only_values: bool=True):
     if only_values:
-        return [tuple([d.get(k, "") for k in ORDER_KEYS]) for d in data_container]
+        return tuple([tuple([d.get(k, "") for k in ORDER_KEYS]) for d in data_container])
     else:
         return [{k: d.get(k, "") for k in ORDER_KEYS} for d in data_container]
     
@@ -681,10 +696,11 @@ def create_news_table(conn,
     conn.commit()
 
 def insert_news(data):
-    with sqlite3.connect(DB_NAME_NEWS, timeout=30.0) as conn:
+    with sqlite3.connect(DB_NAME_NEWS, 
+                         timeout=30.0) as conn:
         cursor = conn.cursor()
         create_news_table(conn, 
-                        cursor)
+                          cursor)
         query_str = """
             INSERT INTO News
                 (title,
@@ -717,9 +733,10 @@ def insert_news(data):
                 )
                 ;
             """
-        #print("data:\n", data)
+        print("data type:\n", type(data), "\ndata element type:\n", type(data[0]))
+        print(data[0])
         cursor.executemany(query_str, 
-                        data)
+                           data)
         conn.commit()
 
 def split_file_and_process(sections_file_path: str, 
@@ -752,7 +769,7 @@ def split_file_and_process(sections_file_path: str,
     # Clean up the split files (optional)
     for i in range(num_splits):
         save_news_checkpoint(str(i), "")
-        split_file_path = os.path.join("data", f"sections_split_{i}.txt")
+        split_file_path = os.path.join(PATH_DATA, f"sections_split_{i}.txt")
         os.remove(split_file_path)
 
 def _split_files(file_path: str, 
@@ -810,7 +827,6 @@ def main_multi_threading_process(sections_chunk: list,
                 checkpoint_started = False
             else:
                 continue
-
         try:
             response = requests.get(section_url, 
                                     headers=HEADERS, 
@@ -856,7 +872,7 @@ def main_multi_threading_process(sections_chunk: list,
                                          )
             n_processed += n1
             n_no_body += n2
-            #same_media_urls = []
+            same_media_news_urls = []
         same_media_news_urls.extend(clean_news_url)
         if not checkpoint_started and (i % N_SAVE_CHECKPOINT == 0):
             save_news_checkpoint(pid, last_same_media)
@@ -892,3 +908,5 @@ if __name__ == "__main__":
                            main_multi_threading_process)
     file_manager.close_all_files()
     print("\n...The process ended...")
+
+
