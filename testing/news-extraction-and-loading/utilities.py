@@ -4,7 +4,7 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import time
 import multiprocessing
 
@@ -97,27 +97,42 @@ def store_failed_urls(wrapped_func):
     wrapper.failed_urls = failed_urls
     return wrapper
 
-class StatisticsReporter():
+class StatisticsManager():
     def __init__(self) -> None:
-        self.time_start = 0.0
+        self.last_process_duration = -1.0
     
     def restart_time(self):
         self.time_start = time.time()
+        return self
+    def set_process_duration(self, 
+                             round_digits: int=1
+                             ):
+        self.last_process_duration = round(time.time() - self.time_start, 
+                                           round_digits)
+        self.time_start = time.time()
+        return self.last_process_duration
 
     def write_extraction_stats(self, data, 
                                header=None, 
+                               input_iso_datetime="",
                                pid: str=0, 
-                               input_date="",
-                               input_time="",
                                main_folder=os.path.join(PATH_DATA, "scrapping-statistics"),
                                subfolder=""
                                ):
-        if not input_date or not input_time:
-            input_date, input_time = str(datetime.today()).split(" ")
-        input_time = input_time.split(" ")[-1].split(".")[0].replace(":", "-")
-        process_time = str(round(time.time() - self.time_start, 1))
+        process_time = str(self.set_process_duration())
+        if input_iso_datetime:
+            dt_fmt = input_iso_datetime.strftime("%Y-%m-%d_%H %M %S")
+            date = input_iso_datetime.strftime("%Y-%m-%d")
+        else:
+            #iso_datetime = datetime.now().replace(tzinfo=timezone.utc)
+            #input_date, input_time = str(datetime.today()).split(" ")
+            #input_time = input_time.split(" ")[-1].split(".")[0].replace(":", "-")
+            process_dt = datetime.now().replace(tzinfo=timezone.utc)
+            dt_fmt = process_dt.strftime("%Y-%m-%d_%H %M %S")
+            date = process_dt.strftime("%Y-%m-%d")
+        
         if not subfolder:
-            subfolder = f"processes_{input_date}"
+            subfolder = f"processes_{date}"
         if isinstance(data, tuple):
             data = list(data)
         if not os.path.exists(os.path.join(main_folder, subfolder)):
@@ -125,7 +140,7 @@ class StatisticsReporter():
 
         stats_path = os.path.join(main_folder, 
                                   subfolder, 
-                                  f"process_{input_date}_{input_time}_pid_{pid}.csv",
+                                  f"process_{dt_fmt}_pid_{pid}.csv",
                                   )
         with open(stats_path, "a") as file:
             if not os.path.exists(stats_path):
@@ -143,7 +158,7 @@ class FileManager():
                   ):
         for file_name in files:
             self._add_file(file_name, 
-                           kwargs)
+                           **kwargs)
     
     def _add_file(self, 
                   file_name: str,
@@ -157,24 +172,19 @@ class FileManager():
         self.files_map[file_name] = open(file_name, open_mode)
     def write_on_file(self, 
                       file_name: str,
-                      msgs: list, 
-                      lock: multiprocessing.Lock,
-                      pid: str=""
+                      msgs: [list[dict], tuple[dict]]
                       ):
-        
+        lock = multiprocessing.Lock()
         with lock:
             for msg in msgs:
                 self._write_on_file(file_name, 
-                                    msg, 
-                                    pid)
+                                    f"{msg['status_code']};{msg['id']}\n")
     
     def _write_on_file(self, 
                        file_name: str,
-                       msg: list[str], 
-                       pid: str=""
+                       msg: str
                        ):
-        if len(msg) > 1:
-            self.files_map[file_name].write(f"{msg};{pid}\n")
+        self.files_map[file_name].write(msg)
     def close_all_files(self):
         for file in self.files_map.values():
             file.close()

@@ -14,22 +14,6 @@ import multiprocessing
 from tqdm import tqdm
 
 from utilities import *
-
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
-from selenium.webdriver.common.by import By
-
-# Configure Chrome to run in headless mode
-chrome_options = Options()
-chrome_options.add_argument("--headless")
-chrome_options.add_argument("--disable-gpu")  # Disable GPU acceleration, which is necessary for headless mode on some platforms
-chrome_options.add_argument(
-    "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.1234.567 Safari/537.36"
-)
-caps = DesiredCapabilities().CHROME
-caps["pageLoadStrategy"] = "none"  # Do not wait for full page load
-driver = webdriver.Chrome(options=chrome_options)
 # Classes
 class ErrorReporter(Exception):
     def __init__(self, message):
@@ -39,27 +23,39 @@ class ErrorReporter(Exception):
             errors_file.write(message)
 ## Constants
 FULL_START = True
-BLOCK_API_CALL = False
+BLOCK_API_CALL = True
+DB_TIMEOUT = 10.0
+MEDIA_GET_REQ_TIMEOUT = 8.0
+NEWS_ARTICLE_GET_REQ_TIMEOUT = 6.0
 SECONDS_IN_DAY = 86_400
 N_MAX_DAYS_OLD = 1
 NUM_CORES = 10
 MAX_N_MEDIAS = 50
 N_SAVE_CHECKPOINT = 5
+# Status codes
+STATUS_0 = "0"
+STATUS_1_1 = "1_1"
+STATUS_1_2 = "1_2"
+STATUS_1_3 = "1_3"
+STATUS_2 = "2"
+STATUS_3_1 = "3_1"
+STATUS_3_2 = "3_2"
+STATUS_3_3 = "3_3"
+STATUS_3_4 = "3_4"
+STATUS_3_5 = "3_5"
+STATUS_3_6 = "3_6"
+STATUS_4 = "4"
 # File names
 PATH_DATA = os.path.join("..", "data")
-#FILE_NAME_GPT_API_ERROR = os.path.join(PATH_DATA, "gpt-api-errors.txt")
-#FILE_NAME_INVALID_URLS = os.path.join(PATH_DATA, "No-valid-urls.txt")
-#FILE_NAME_NOT_ARTICLE_URLS = os.path.join(PATH_DATA, "No-articles-urls.txt")
-#FILE_NAME_TOO_MANY_RETRIES_URLS = os.path.join(PATH_DATA, "Too-many-retries-urls.txt")
 FILE_NAME_EXTRACTION_ERRORS = os.path.join(PATH_DATA, "extraction-errors.txt")
 FILE_NAME_PROMPT_ROLE_KEYS = os.path.join(PATH_DATA, "role-prompt-keys-extraction.txt")
+FILE_NAME_PROMPT_ROLE_SUMMARY = os.path.join(PATH_DATA, "role-prompt-body-extraction.txt")
 # Database names
 # Managers instantiation
 file_manager = FileManager()
 file_manager.add_files([
     FILE_NAME_EXTRACTION_ERRORS
     ])
-
 DB_NAME_NEWS = os.path.join(PATH_DATA, "news_db.sqlite3")
 # Dates and times
 TODAY_LOCAL_DATETIME = datetime.now().replace(tzinfo=timezone.utc)
@@ -80,27 +76,13 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
 }
 ## Dynamical global variables
-openai.api_key = os.getenv("OPENAI_API_KEY")
-with open(FILE_NAME_PROMPT_ROLE_KEYS, "r") as file:
-    prompt_role = file.read()
-prompt_role_summary_only = """
-You are a journalist who follows these guidelines:
+if not BLOCK_API_CALL:
+    openai.api_key = os.getenv("OPENAI_API_KEY")
+#with open(FILE_NAME_PROMPT_ROLE_KEYS, "r") as file:
+#    prompt_role = file.read()
+with open(FILE_NAME_PROMPT_ROLE_SUMMARY, "r") as file:
+    prompt_role_summary = file.read()
 
-1. Write the summary in the third-person point of view.
-2. Use the language from the provided text to write the Body Summary.
-3. Include important details.
-
-Extract and output the following information from the provided text:
-
-Tokens: [tokens]
-Body Summary: [body summary]
-
-Replace [tokens] with the number of tokens of the incoming text.
-Extract the information for [body summary] from the provided text.
-If the information could not be found then write "N/A" without quotes.
-Please stand by for me to prompt the text.
-"""
-scheduled_process = True
 regex_title = re.compile("title|headline|titular|titulo")
 regex_body = re.compile("articleBody")
 regex_date_creation = re.compile("date.*[pP]ub.*")
@@ -126,13 +108,17 @@ def error_logger(manager: FileManager,
                  ):
     def decorator(target_func):
         def wrapper(*args, **kwargs):
-            data, success = target_func(*args, **kwargs)
-            print("Collectors from target func:", args, kwargs)
-            if not success:
+            data, cache = target_func(*args, **kwargs)
+            status_code = cache.get("status_code", False)
+            if isinstance(cache, (list, tuple)) and status_code:
                 manager.write_on_file(file_name,
-                                      error_msgs,
-                                      lock,
-                                      pid,
+                                      status_code
+                                      )
+                return data
+            status_code = cache.get("status_code", "0")
+            if isinstance(status_code, dict) and status_code != "0":
+                manager.write_on_file(file_name,
+                                      [cache]
                                       )
             return data
         return wrapper
@@ -140,7 +126,9 @@ def error_logger(manager: FileManager,
 
 ## Functions
 def find_news_body_from_json(html: BeautifulSoup, 
-                             data: dict) -> dict:
+                             data: dict, 
+                             url: str
+                             ) -> dict:
     data["body"] = ""
     data["n_tokens"] = 0
     jsons = html.find_all("script", 
@@ -153,15 +141,14 @@ def find_news_body_from_json(html: BeautifulSoup,
             else:
                 continue
         if "articleBody" in json_data:
-            body, n_tokens, success = get_body_summary(remove_body_tags(json_data["articleBody"]))
-            #body = ""
-            #n_tokens = 0
+            body, n_tokens = get_body_summary(remove_body_tags(json_data["articleBody"]), 
+                                              url
+                                              )
             data["body"] = body
             data["n_tokens"] = n_tokens
             break
-    return data, success
+    return data
 
-@error_logger(file_manager, FILE_NAME_EXTRACTION_ERRORS)
 def extract_data_from_jsons(html: BeautifulSoup, 
                             url: str,
                             only_article_body: bool=True 
@@ -174,7 +161,6 @@ def extract_data_from_jsons(html: BeautifulSoup,
     creation_datetime_found = False
     modified_datetime_found = False
     extraction_completed = False
-    body_summary_success = False
     type_value = None
     invalid_web = False
     jsons = html.find_all("script", 
@@ -189,16 +175,15 @@ def extract_data_from_jsons(html: BeautifulSoup,
             json_data = json.loads(json_text, 
                                    strict=False)
         except Exception as e:
-            print("JSON error:", e, "\n", url)
+            continue
         if isinstance(json_data, (list, tuple)):
             if json_data:
                 json_data = json_data[0]
         for k, json_values in json_data.items():
             if not body_found and "articleBody" in k:
-                print("Body found")
-                body, n_tokens, body_summary_success = get_body_summary(remove_body_tags(json_data["articleBody"]))
-                #body = ""
-                #n_tokens = 0
+                body, n_tokens = get_body_summary(remove_body_tags(json_data["articleBody"]), 
+                                                  url
+                                                  )
                 data_extracted["body"] = body
                 data_extracted["n_tokens"] = n_tokens
                 body_found = True
@@ -216,10 +201,9 @@ def extract_data_from_jsons(html: BeautifulSoup,
                 elif isinstance(json_values, str):
                     type_value = json_values.lower()
                     if (type_value.startswith("news") or type_value.endswith("article")) and "media" not in type_value:
-                        #print("Value without media?", type_value)
                         type_found = True
             if invalid_web:
-                print("Invalid web")
+                # "Invalid web"
                 break
             if only_article_body:
                 if body_found:
@@ -256,8 +240,8 @@ def extract_data_from_jsons(html: BeautifulSoup,
                 extraction_completed = True
                 break
     if not type_found:
-        return {}, False
-    return data_extracted, body_summary_success
+        return {}
+    return data_extracted
 
 def extract_data_from_metadata(parsed_html: BeautifulSoup, 
                                data_input: dict) -> tuple[dict, bool]:
@@ -327,31 +311,32 @@ def extract_data_from_metadata(parsed_html: BeautifulSoup,
     return data_extacted
 
 def extract_keys_with_gpt(parsed_code: BeautifulSoup) -> dict:
-    print("..Keys through gpt..")
-    tags_with_text = parsed_code.find_all(lambda tag: (tag.name == "p" and not tag.attrs) or ("h" in tag.name and not tag.attrs))
+    #print("..Keys through gpt..")
+    tags_with_text = parsed_code.find_all(lambda tag: tag.name in ("p", "h1", "h2"))
     text_clean_from_tags = "".join([re.sub("\n+", "\n", tag.get_text()) for tag in tags_with_text])
-    text_clean_from_tags = text_clean_from_tags.split("\n")[0]
+    text_clean_from_tags
     ok = False
     try:
         openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", 
-                 "content": prompt_role},
+                 "content": prompt_role_summary},
                 {"role": "user", 
                  "content": text_clean_from_tags},
             ]
         )
         ok = True
     except Exception as e:
-        print("Keys GPT error:", e)
+        #print("Keys GPT error:", e)
+        pass
         
     if ok:
         message_content = openai_response["choices"][0].message["content"]
         try:
             n_tokens = regex_n_tokens.search(message_content).groups()[0]
         except:
-            n_tokens = 0
+            n_tokens = -1
         try:
             title = regex_headline.search(message_content).groups()[0]
         except:
@@ -389,106 +374,105 @@ def extract_keys_with_gpt(parsed_code: BeautifulSoup) -> dict:
 def remove_body_tags(text: str) -> str:
     return re.sub("<.*?>", "", text)
 
-def find_news_body_with_gpt(parsed_html: BeautifulSoup) -> dict:
-    print("..Body through gpt..")
-    tags_with_text = parsed_html.html.body.find_all(lambda tag: tag.name in ("p", "h1", "h2"))
-    clean_paragraphs = "".join([re.sub("\n+", "\n", tag.get_text()) for tag in tags_with_text])
-    clean_paragraphs = clean_paragraphs.split("\n")[0]
-    parag_texts = str({i: x if x else "\n" for i, x in enumerate(clean_paragraphs)})[1:-1]
-    body, n_tokens, success = get_body_summary(parag_texts)
-    #body = ""
-    #n_tokens = 0
-
+def find_news_body_with_gpt(parsed_html: BeautifulSoup, 
+                            url: str
+                            ) -> dict:
+    tags_with_text = parsed_html.find_all(lambda tag: tag.name in ("p", ))
+    text_clean_from_tags = "".join([re.sub("\n+", "\n", tag.get_text()) for tag in tags_with_text])
+    #clean_paragraphs = clean_paragraphs.split("\n")[0]
+    #parag_texts = str({i: x if x else "\n" for i, x in enumerate(clean_paragraphs)})[1:-1]
+    body, n_tokens = get_body_summary(text_clean_from_tags, 
+                                      url
+                                      )
     data = {
         "n_tokens": n_tokens,
         "body": body
     }
-    return data, success
+    return data
 
-def get_body_summary(text: str) -> tuple[str, str]:
+@error_logger(file_manager, FILE_NAME_EXTRACTION_ERRORS)
+def get_body_summary(text: str, 
+                     url: str
+                     ) -> tuple[str, str]:
     if BLOCK_API_CALL:
-        return "The admin blanked the summary", 0, True
-    ok = False
+        #return ("noarticlebody", -1), {"status_code": STATUS_0, "id": ""}
+        return (text, -1), {"status_code": STATUS_0, "id": ""}
     try:
         openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": prompt_role_summary_only},
+                {"role": "system", "content": prompt_role_summary},
                 {"role": "user", "content": text},
             ]
         )
-        ok = True
     except Exception as e:
-        print("Summary GPT error:", e)
+        return ("", 0), {"status_code": STATUS_4, "id": url}
     
-    if ok:
-        message_content = openai_response["choices"][0].message["content"]
-        try:
-            n_tokens = regex_n_tokens.search(message_content).groups()[0]
-        except:
-            n_tokens = 0
-        try:
-            body_summary = regex_only_summary.search(message_content).groups()[0]
-        except:
-            body_summary = ""
-        return body_summary, n_tokens, ok
-    else:
-        return "", 0, ok
+    message_content = openai_response["choices"][0].message["content"]
+    try:
+        n_tokens = regex_n_tokens.search(message_content).groups()[0]
+    except:
+        n_tokens = -1
+    try:
+        body_summary = regex_only_summary.search(message_content).groups()[0]
+    except:
+        body_summary = ""
+    if "BodyNotFound" in body_summary:
+        body_summary = text
+        n_tokens = -1
+    return (body_summary, n_tokens), {"status_code": STATUS_0, "id": ""}
 
 def treat_raw_news_urls(news_urls: list, 
                         media_url: str,
-                        pid: str,
-                        lock: multiprocessing.Lock
+                        pid: str
                         ):
     
-    media_stats_reporter = StatisticsReporter()
-    media_stats_reporter.restart_time()
+    media_stats_manager = StatisticsManager().restart_time()
     urls = find_valid_news_urls(news_urls,
-                                media_url,
-                                pid,
-                                lock)
+                                media_url)
+    lock = multiprocessing.Lock()
     with lock:
         select_urls = pd.DataFrame(read_stored_news(media_url), 
-                                columns=["url2"])
+                           columns=["in_store"]
+                           )
     extracted_urls = pd.DataFrame(urls, 
-                                  columns=["url1"]
-                                  )
-    are_new_news = extracted_urls.merge(select_urls, 
-                                        left_on="url1", 
-                                        right_on="url2", 
-                                        how="left").isnull().any(axis=1)
+                                  columns=["in_extraction"]
+                                  ).drop_duplicates()
+    df_novels = select_urls.merge(extracted_urls, 
+                                  left_on="in_store", 
+                                  right_on="in_extraction", 
+                                  how="right")
     # Merge extracted and loaded news in order to process the new ones
-    news_to_process = extracted_urls.loc[are_new_news, "url1"].tolist()
+    novel_news_to_process = df_novels \
+        .loc[df_novels.in_store.isnull(), "in_extraction"]\
+            .tolist()
+    print(f"Read; extracted;to_process: {len(select_urls)}, {len(extracted_urls)}, {len(novel_news_to_process)}, {len(extracted_urls) >= len(novel_news_to_process)}")
     # Process new news
-    processed_news_data, n_no_body = find_news_data(news_to_process, 
-                                                    author=media_url,
-                                                    pid=pid,
-                                                    lock=lock
-                                                    ) # ordered
-    n_processed = len(processed_news_data)
-    with lock:
-        insert_news(processed_news_data)
+    news_data, n_no_body = find_news_data(novel_news_to_process, 
+                                          author=media_url,
+                                          pid=pid,
+                                          order_keys=True) # ordered
+    if news_data:
+        with lock:
+            insert_news(news_data)
     # Statistics
-    media_stats_reporter.write_extraction_stats((media_url, 
-                                                 n_processed, 
-                                                 n_no_body), 
-                                                pid=pid,
-                                                input_date=CURRENT_DATE,
-                                                input_time=CURRENT_TIME
+    n_processed = len(news_data)
+    media_stats_manager.write_extraction_stats((media_url, 
+                                                n_processed, 
+                                                n_no_body), 
+                                                TODAY_LOCAL_DATETIME,
+                                                pid=pid
                                                 )
     if n_processed > 0:
         print(f"\tmedia name: {media_url} processed counts: {str(n_processed)}")
     return n_processed, n_no_body
 
-@error_logger(file_manager,  FILE_NAME_EXTRACTION_ERRORS)
+@error_logger(file_manager, FILE_NAME_EXTRACTION_ERRORS)
 def find_valid_news_urls(news_urls: list, 
-                         media_url: str, 
-                         *args,
-                         **kwargs
+                         media_url: str
                          ) -> (list, bool):
     valid_news_urls = []
-    error_msgs = []
-    #with open(FILE_NAME_INVALID_URLS + f"_{pid}" + ".txt", "w") as file_invalid:
+    status_cache = []
     for news_url in news_urls:
         # Filter out urls with query symbols
         if re.search("[?=&+%@#]{1}", news_url):
@@ -496,7 +480,7 @@ def find_valid_news_urls(news_urls: list,
             query_start = search_spec_char.span()[0]
             news_url = news_url[:query_start]
         if news_url == media_url:
-            error_msgs.append(f"error-code-3.1;{news_url}")
+            status_cache.append({"status_code": STATUS_3_1, "id": news_url})
             continue
         if  news_url.endswith(".xml") \
             or news_url.endswith(".pdf") \
@@ -504,83 +488,70 @@ def find_valid_news_urls(news_urls: list,
             or news_url.endswith(".jpg") \
             or news_url.endswith(".png") \
             or news_url.endswith(".gif"):
-            error_msgs.append(f"error-code-3.2;{news_url}")
+            status_cache.append({"status_code": STATUS_3_2, "id": news_url})
             continue
         if "pagina-1.html" in news_url \
             or "/firmas" in news_url \
             or "/humor/" in news_url \
             or "/autor" in news_url \
             or "/autores/" in news_url \
+            or "/foto/" in news_url \
+            or "/fotos/" in news_url \
             or "/video/" in news_url \
-            or "/videos/" in news_url:
-            error_msgs.append(f"error-code-3.3;{news_url}")
+            or "/videos/" in news_url \
+            or "/opinión/" in news_url \
+            or "/opinion/" in news_url:
+            status_cache.append({"status_code": STATUS_3_3, "id": news_url})
             continue
         news_url_splits = [x for x in news_url.split("/") if x][2:]
         if len(news_url_splits) <= 1:
-            error_msgs.append(f"error-code-3.4;{news_url}")
+            status_cache.append({"status_code": STATUS_3_4, "id": news_url})
             continue
         elif len(news_url_splits) >= 2:
             if re.search(r"^[.a-zA-Z0-9]+(-[.a-zA-Z0-9]+){,2}$", news_url_splits[-1]):
-                error_msgs.append(f"error-code-3.5;{news_url}")
+                status_cache.append({"status_code": STATUS_3_5, "id": news_url})
                 continue
         if media_url[:-1] not in news_url:
-            error_msgs.append(f"error-code-3.6;{news_url}")
+            status_cache.append({"status_code": STATUS_3_6, "id": news_url})
             continue
         if re.search("https?:[\/]{2}", news_url):
             valid_news_urls.append(news_url)
-    return list(set(valid_news_urls)), error_msgs
-
-
+    cache = {"status_code": status_cache}
+    return list(set(valid_news_urls)), cache
 
 def find_news_data(news_urls: list, 
                    author: str,
                    pid: str,
-                   lock: multiprocessing.Lock,
-                   order_keys: bool=True
+                   order_keys=False
                    ):
     news_media_data = []
     n_no_articlebody_in_article = 0
-    #with open(FILE_NAME_NOT_ARTICLE_URLS + f"_{pid}" + ".txt", "w") as file_no_articles, \
-    #     open(FILE_NAME_TOO_MANY_RETRIES_URLS + f"_{pid}" + ".txt", "w") as file_too_many_retries:
     for news_url in news_urls:
-        #print("Finding data for url:", f"(author: {author}) ", news_url)
-        #continue
         try:
             resp_url_news = requests.get(news_url, 
-                                         headers=HEADERS)
+                                         headers=HEADERS, 
+                                         timeout=MEDIA_GET_REQ_TIMEOUT,
+                                         )
         except requests.exceptions.TooManyRedirects as e1:
-            print("An error 1 occurred:", e1)
-            #file_too_many_retries.write(news_url)
-            file_manager.write_on_file(FILE_NAME_TOO_MANY_RETRIES_URLS, 
-                                       [news_url], 
-                                       lock, 
-                                       pid)
+            print(news_url, "An error 1 occurred:", e1)
+            file_manager.write_on_file(FILE_NAME_EXTRACTION_ERRORS, 
+                                       [{"status_code": STATUS_1_1, "id": news_url}])
             continue
         except requests.exceptions.RequestException as e2:
-            print("An error 2 occurred:", e2)
-            #file_too_many_retries.write(news_url)
-            file_manager.write_on_file(FILE_NAME_TOO_MANY_RETRIES_URLS, 
-                                       [news_url], 
-                                       lock, 
-                                       pid)
+            print(news_url, "An error 2 occurred:", e2)
+            file_manager.write_on_file(FILE_NAME_EXTRACTION_ERRORS, 
+                                       [{"status_code": STATUS_1_2, "id": news_url}])
             continue
         except UnicodeDecodeError as e3:
-            print("An error 3 occurred:", e3)
-            #file_too_many_retries.write(news_url)
-            file_manager.write_on_file(FILE_NAME_TOO_MANY_RETRIES_URLS, 
-                                       [news_url], 
-                                       lock, 
-                                       pid)
+            print(news_url, "An error 3 occurred:", e3)
+            file_manager.write_on_file(FILE_NAME_EXTRACTION_ERRORS, 
+                                       [{"status_code": STATUS_1_3, "id": news_url}])
             continue
         except Exception as e4:
-            print("An error 4 occurred:", e4)
-            #file_too_many_retries.write(news_url)
-            file_manager.write_on_file(FILE_NAME_TOO_MANY_RETRIES_URLS, 
-                                       [news_url], 
-                                       lock, 
-                                       pid)
+            print(news_url, "An error 4 occurred:", e4)
+            file_manager.write_on_file(FILE_NAME_EXTRACTION_ERRORS, 
+                                       [{"status_code": STATUS_1_2, "id": news_url}])
             continue
-
         
         parsed_news_hmtl = BeautifulSoup(resp_url_news.content, 
                                         "html.parser")
@@ -589,73 +560,56 @@ def find_news_data(news_urls: list,
             meta_tag_published_time = parsed_news_hmtl.html.head.find("meta", 
                                                                       attrs={"property": re.compile(r"publish(?:ed)?_?(?:time|date)")})
             if meta_tag_published_time is None:
-                #print("Bad content", news_url)
                 continue
             publ_tsm = meta_tag_published_time.attrs["content"]
             if not publ_tsm:
-                #print("Bad content", news_url)
                 continue
             dtime_diff = (TODAY_LOCAL_DATETIME - datetime.fromisoformat(publ_tsm)).total_seconds() / SECONDS_IN_DAY
             if dtime_diff > N_MAX_DAYS_OLD:
                 continue
         except:
-            print("Time difference not calculated", meta_tag_published_time, ";", news_url)
+            #print("Time difference not calculated", meta_tag_published_time, ";", news_url)
             continue
         data = {}
-        #data["creation_datetime"] = ""
-        #data["modified_datetime"] = ""
-        
-        #try:
         extracted_data = extract_data_from_jsons(parsed_news_hmtl, 
                                                  news_url
                                                  )
-        data.update(extracted_data)
+        if extracted_data:
+            data.update(extracted_data)
         extracted_data = extract_data_from_metadata(parsed_news_hmtl, 
                                                     data
                                                     )
-        data.update(extracted_data)
-        #print("from metadata:", extracted_data)
+        if extracted_data:
+            data.update(extracted_data)
         if not data.get("title", False) or not data.get("creation_datetime", False):
-            print("1. No title", news_url, extracted_data)
             continue
-        #else:
-        #    print("2. Title Found", news_url, extracted_data)
         if not data.get("body", False):
-            print("No body, find from html tags with gpt", news_url)
             n_no_articlebody_in_article += 1
-            extracted_data, summary_success = find_news_body_with_gpt(parsed_news_hmtl)
-            if not summary_success:
-                file_manager.write_on_file(FILE_NAME_GPT_API_ERROR, 
-                                           [news_url],
-                                           lock,
-                                           pid
-                                           )
-            data.update(find_news_body_with_gpt(parsed_news_hmtl))
-        #if not extracted_data.get("body", False):
-        #    data = extract_keys_with_gpt(parsed_news_hmtl)
-        #if not extracted_data.get("body", False):
-        #    print("nothing")
-        #    continue
+            extracted_data = find_news_body_with_gpt(parsed_news_hmtl, 
+                                                     news_url)
+            if not extracted_data.get("body", False):
+                continue
+            data.update(extracted_data)
 
         data["country"] = parsed_news_hmtl.html.attrs.get("lang", "")
         # TODO complete this
         data["source"] = author
         data["url"] = news_url
-        news_media_data.append(data)
-    if order_keys:
-        news_media_data = order_dict_keys(news_media_data
-                                          ) 
+        if order_keys:
+            news_media_data.append(order_dict_keys(data))
+        else:
+            news_media_data.append(data)
     return news_media_data, n_no_articlebody_in_article
 
-def order_dict_keys(data_container: list[dict], 
+def order_dict_keys(keys_values: list[dict], 
                     only_values: bool=True):
     if only_values:
-        return tuple([tuple([d.get(k, "") for k in ORDER_KEYS]) for d in data_container])
+        return tuple([keys_values.get(target_k, "") for target_k in ORDER_KEYS])
     else:
-        return [{k: d.get(k, "") for k in ORDER_KEYS} for d in data_container]
+        return {target_k: keys_values.get(target_k, "")  for target_k in ORDER_KEYS}
     
 def read_stored_news(where_params):
-    with sqlite3.connect(DB_NAME_NEWS, timeout=30.0) as conn:
+    with sqlite3.connect(DB_NAME_NEWS, timeout=DB_TIMEOUT) as conn:
         cursor = conn.cursor()
         create_news_table(conn, 
                         cursor)
@@ -695,13 +649,14 @@ def create_news_table(conn,
     cursor.execute(query_str)
     conn.commit()
 
-def insert_news(data):
+def insert_news(data: tuple[tuple]):
     with sqlite3.connect(DB_NAME_NEWS, 
-                         timeout=30.0) as conn:
+                         timeout=DB_TIMEOUT) as conn:
         cursor = conn.cursor()
         create_news_table(conn, 
                           cursor)
-        query_str = """
+        #datetime('now','localtime'),
+        query_str = f"""
             INSERT INTO News
                 (title,
                 article,
@@ -727,14 +682,14 @@ def insert_news(data):
                     ?,
                     ?,
                     ?,
-                    datetime('now','localtime'),
+                    DATETIME('now', 'localtime'),
                     '',
                     ?
                 )
                 ;
             """
-        print("data type:\n", type(data), "\ndata element type:\n", type(data[0]))
-        print(data[0])
+        if not isinstance(data, tuple):
+            data = tuple(data)
         cursor.executemany(query_str, 
                            data)
         conn.commit()
@@ -743,7 +698,6 @@ def split_file_and_process(sections_file_path: str,
                            num_splits: int, 
                            process_function):
     
-    lock = multiprocessing.Lock()
     chunks = _split_files(sections_file_path, 
                           num_splits)
 
@@ -756,8 +710,7 @@ def split_file_and_process(sections_file_path: str,
 
         process = multiprocessing.Process(target=process_function, 
                                           args=(chunk, 
-                                                str(i), 
-                                                lock
+                                                str(i),
                                                 ))
         processes.append(process)
         process.start()
@@ -800,8 +753,7 @@ def _split_files(file_path: str,
     return chunks
 
 def main_multi_threading_process(sections_chunk: list, 
-                                 pid: str,
-                                 lock: multiprocessing.Lock
+                                 pid: str
                                  ):
     # 1 Initialize reboot or not
     media_checkpoint = read_news_checkpoint(pid)
@@ -810,27 +762,26 @@ def main_multi_threading_process(sections_chunk: list,
     else:
         checkpoint_started = True
     # 1 End
-    media_stats_reporter = StatisticsReporter()
-    media_stats_reporter.restart_time()
+    media_stats_manager = StatisticsManager().restart_time()
     last_same_media = ""
     same_media_news_urls = []
     n_processed = 0
     n_no_body = 0
-    for i, row_section_and_media in tqdm(enumerate(sections_chunk)):
+    for i, row_section_and_media in enumerate(sections_chunk):
         #media = re.search("(https?://[^/]+/)", section_url).groups()[0]
-        section_url, media = row_section_and_media.split(";")
+        section_url, input_media = row_section_and_media.split(";")
         section_url = section_url.strip()
-        if not media.startswith("https://"):
-            media = "https://" + media
+        if not input_media.startswith("https://"):
+            input_media = "https://" + input_media
         if checkpoint_started:
-            if media == media_checkpoint:
+            if input_media == media_checkpoint:
                 checkpoint_started = False
             else:
                 continue
         try:
             response = requests.get(section_url, 
                                     headers=HEADERS, 
-                                    timeout=10)
+                                    timeout=NEWS_ARTICLE_GET_REQ_TIMEOUT)
         except requests.exceptions.Timeout:
             # Handle the timeout exception
             print("The request timed out.")
@@ -843,11 +794,11 @@ def main_multi_threading_process(sections_chunk: list,
             section_url = section_url.replace("www.", "")
             response = requests.get(section_url, 
                                     headers=HEADERS, 
-                                    timeout=10)
+                                    timeout=NEWS_ARTICLE_GET_REQ_TIMEOUT)
             #ErrorReporter(f"Get request general exception, {e}, at {section_url}")
-            media = media.replace("www.", "")
+            input_media = input_media.replace("www.", "")
             print("Request success without 'www'")
-
+        
         parsed_hmtl = BeautifulSoup(response.content, 
                                     "html.parser")
         tags_with_url = parsed_hmtl.find_all("a", 
@@ -859,16 +810,15 @@ def main_multi_threading_process(sections_chunk: list,
             if url.startswith("//"):
                 url = "https:" + url
             elif url.startswith("/"):
-                url = media[:-1] + url
+                url = input_media[:-1] + url
             elif url.startswith("www.") or not url.startswith("https://"):
                 url = "https://" + url
             clean_news_url.append(url)
-        if media != last_same_media and last_same_media:
+        if input_media != last_same_media and last_same_media:
             unique_same_media_urls = list(set(same_media_news_urls))
             n1, n2 = treat_raw_news_urls(unique_same_media_urls, 
                                          last_same_media,
-                                         str(pid),
-                                         lock
+                                         str(pid)
                                          )
             n_processed += n1
             n_no_body += n2
@@ -876,21 +826,19 @@ def main_multi_threading_process(sections_chunk: list,
         same_media_news_urls.extend(clean_news_url)
         if not checkpoint_started and (i % N_SAVE_CHECKPOINT == 0):
             save_news_checkpoint(pid, last_same_media)
-        last_same_media = media
+        last_same_media = input_media
     unique_same_media_urls = list(set(same_media_news_urls))
     n1, n2 = treat_raw_news_urls(unique_same_media_urls,
                                  last_same_media,
-                                 str(pid),
-                                 lock
+                                 str(pid)
                                  )
     n_processed += n1
     n_no_body += n2
-    media_stats_reporter.write_extraction_stats(("Process summary", 
+    media_stats_manager.write_extraction_stats(("Process summary", 
                                                  n_processed, 
                                                  n_no_body), 
-                                                pid="summary",
-                                                input_date=CURRENT_DATE,
-                                                input_time=CURRENT_TIME
+                                                TODAY_LOCAL_DATETIME,
+                                                pid="summary"
                                                 )
 if __name__ == "__main__":
     print(f"\n...Datetime of process: {CURRENT_DATE} {CURRENT_TIME}...\n")
