@@ -1,0 +1,164 @@
+body, html{
+    height:100%;
+    background-color: whitesmoke;
+    margin: 0;
+}
+header {
+    background-color: white;
+    top: 0;
+    width:100%;
+    position:fixed; 
+    
+}
+
+header h1{
+    font-size: 8rem;
+    text-align: center; 
+    margin: 0 auto; 
+    
+}
+
+header h2{
+    text-align: center; 
+    margin: 0 auto; 
+    
+}
+
+header hr{
+    margin: 2px;
+    color: black;
+}
+
+header nav {
+    display: flex;
+    justify-content: space-evenly;
+    background-color: rgba(218, 193, 57,0.5);
+
+    
+}
+
+header nav a{
+    text-decoration: none;
+    color: black;
+    font-size: 1.25rem;
+    padding: 1rem
+    
+}
+
+
+header nav a:hover{
+    background-color: rgba(221, 129, 10, 0.5);
+    color: whitesmoke;
+}
+header nav a:active{
+    color: red;
+
+}    
+
+main{
+    margin-top: 15.19rem;
+}
+
+@media screen and (max-width:741px){
+    main{
+        margin-top: 24.38rem;
+    }
+}
+
+main div.noticia{
+    display: flex;
+    flex-direction: column;
+    border: 1px solid grey;
+    border-radius: 1.5%;
+    margin-right:auto;
+    margin-left: auto;
+    margin-top: 5px;
+    margin-bottom: 15px;
+    padding: 10px;
+    overflow: auto;
+    box-shadow: 2px 2px 6px 0px rgba(0,0,0,0.3);
+}
+
+
+
+main div.noticia h1, h2{
+    font-family: 'Roboto', sans-serif;
+    font-weight: 700;
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+    
+}
+
+main div.noticia h2{
+    font-weight: 500;
+    
+}
+
+main div.noticia h6 {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+
+}
+
+
+@media screen and (min-width:770px){
+
+    main div.noticia{
+        display: flex;
+        border: 1px solid grey;
+        margin-right: 29vw;
+        margin-left: 29vw;
+        margin-top: 5px;
+        margin-bottom: 5px;
+        padding: 10px;
+        overflow: auto;
+        box-shadow: 2px 2px 6px 0px rgba(0,0,0,0.3);
+    }
+    main div.noticia p{
+        text-align:justify;
+    }
+    img{
+        display: flex;
+        width: auto;
+        height: auto;
+    }
+}
+
+@media screen and (max-width:499px){
+    header nav {
+        display: flex;
+        flex-direction: column;
+    }
+ 
+    header h1{
+        font-size: 6rem;
+    }
+
+    header nav a{
+        font-size: 1rem;
+        padding: 0.75rem;
+    }
+    main{
+        margin-top: 29.56rem;
+    }
+
+}
+@media screen and (max-width:390px){
+    main{
+        margin-top: 31.38rem;
+    }
+}
+
+    
+img{
+    display: flex;
+     
+}
+
+button{
+    width:26px;
+    border-radius: 35%;
+    border: 1px solid black;
+    margin-left: auto;
+    text-size-adjust: 5%;
+}
