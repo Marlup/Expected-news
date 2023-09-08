@@ -11241,3 +11241,13 @@
 1_2;https://sevilla.abc.es/economia/ayudas-7200-euros-autonomos-andalucia-requisitos-plazos-20230726113516-nts.html
 1_2;https://sevilla.abc.es/motor/fecha-limite-usar-triangulos-emergencia-cambiarlos-balizas-20221120193225-nts.html
 1_2;https://sevilla.abc.es/ciencia/descubren-provocar-nacimiento-virginal-consiguen-moscas-20230727170520-nt.html
+1_1;https://www.farodevigo.es/finanzas-personales/2023/07/01/mejores-trucos-ahorrar-vacaciones-disfrutar-15494136.html
+1_2;https://sevilla.abc.es/sevilla/sevi-maria-jimenez-acabo-201810130852_noticia.html
+1_2;https://sevilla.abc.es/motor/fecha-limite-usar-triangulos-emergencia-cambiarlos-balizas-20221120193225-nts.html
+1_2;https://sevilla.abc.es/sevilla/sevi-boda-sergio-ramos-y-pilar-rubio-video-salieron-catedral-como-marido-y-mujer-201906151931_noticia.html
+1_2;https://elpais.com/television/2023-09-08/georgia-espana-partido-de-clasificacion-para-la-eurocopa-de-alemania-2024-y-otras-cuatro-sugerencias-para-ver-hoy-en-la-television.html
+1_2;https://elpais.com/tecnologia/2023-08-29/escuelas-de-idiomas-en-el-metaverso-y-clases-de-conversacion-con-chatgpt-la-ia-llega-a-la-ensenanza-online.html
+1_2;https://sevilla.abc.es/sevilla/sevi-boda-sergio-ramos-y-pilar-rubio-video-salieron-catedral-como-marido-y-mujer-201906151931_noticia.html
+1_1;https://sevilla.abc.es/motor/fecha-limite-usar-triangulos-emergencia-cambiarlos-balizas-20221120193225-nts.html
+1_1;https://www.farodevigo.es/finanzas-personales/2022/07/23/mejores-trucos-ahorrar-vacaciones-disfrutar-15494136.html
+1_1;https://www.informacion.es/buscando-respuestas/2023/07/05/avispas-abejas-prevenir-tratar-picaduras-52047374.html
