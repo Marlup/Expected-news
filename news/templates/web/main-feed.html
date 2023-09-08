@@ -135,10 +135,9 @@
             <div id ="center-column">
                  <p>Center Column</p>
                  {% for row in rows %}
-                    <div id="news-element-{{ forloop.counter }}"
-                         class="scrollable-content">
-                        <img src= "{{ row.imageUrl|safe }}"
-                             alt="Image">
+                    <div id="news-element-{{ forloop.counter }}" class="scrollable-content">
+                        <img src="{{ row.imageUrl|safe }}" alt="Image">                      
+                        <p>{{ row.creationDate }}</p>
                         <h1>{{ row.title|safe }}</h1>
                         <p>{{ row.description|safe }}</p>
                         <button class="button-expand" 
@@ -146,9 +145,8 @@
                             data-toggle="expandable">Más</button>
                         
                         <div class="articleBody-expandable" style="display: none">
-                            <p>{{ row.creationDate }}</p>
                             <p>{{ row.articleBody|safe }}</p>
-                            <a href={{ row.url|safe }}>Noticia original</a>
+                            <a href={{ row.url|safe }} target="blank">Ir al artículo original</a>
                         </div>
                         <br>
                     </div>
@@ -171,7 +169,7 @@
     <script>
         $(document).ready(function(){
           $('.button-expand').click(function() {
-            $(this).siblings('.articleBody-expandable').slideToggle('slow');
+            $(this).siblings('.articleBody-expandable').slideToggle('fast');
           });
         });
     </script>
