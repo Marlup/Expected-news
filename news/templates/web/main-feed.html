@@ -140,11 +140,13 @@
                         <img src= "{{ row.imageUrl|safe }}"
                              alt="Image">
                         <h1>{{ row.title|safe }}</h1>
-                        <!--<p>{{ row.description }}</p>-->
+                        <p>{{ row.description|safe }}</p>
                         <button class="button-expand" 
                             style="width: fit-content; margin: 10px" 
                             data-toggle="expandable">Más</button>
-                        <div class="articleBody-expandable" style="display: none;">
+                        
+                        <div class="articleBody-expandable" style="display: none">
+                            <p>{{ row.creationDate }}</p>
                             <p>{{ row.articleBody|safe }}</p>
                             <a href={{ row.url|safe }}>Noticia original</a>
                         </div>

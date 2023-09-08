@@ -7,7 +7,8 @@ from .server_variables import *
 def view_main_feed(request, 
                    n_rows=N_SHOWN_FEED_ROWS):
     query_set = News.objects.values("url",
-                                    "creationDate", 
+                                    "creationDate",
+                                    "insertDate", 
                                     "title",
                                     "description", 
                                     "articleBody", 
