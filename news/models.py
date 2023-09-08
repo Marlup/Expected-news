@@ -10,18 +10,18 @@ class News(models.Model):
     media_url = models.CharField(name="mediaUrl",
                                  max_length=255, 
                                  default="")
-    creation_date = models.DateField(name="creationDate", 
-                                     max_length=32,
-                                     default="",
-                                     blank=False)
-    insert_date = models.DateField(name="insertDate", 
-                                   max_length=32,
-                                   default="",
-                                   blank=False)
-    update_date = models.DateField(name="updateDate", 
-                                  max_length=32,
-                                  default="",
-                                  blank=True)
+    creation_date = models.DateTimeField(name="creationDate", 
+                                         max_length=32,
+                                         default="",
+                                         blank=True)
+    insert_date = models.DateTimeField(name="insertDate", 
+                                       max_length=32,
+                                       default="",
+                                       blank=True)
+    update_date = models.DateTimeField(name="updateDate", 
+                                       max_length=32,
+                                       default="",
+                                       blank=True)
     title = models.CharField(name="title", 
                              max_length=255, 
                              default="",
@@ -38,7 +38,7 @@ class News(models.Model):
                                   blank=True)
     other_topic = models.TextField(name="otherTopic", 
                                    default="",
-                                     blank=True)
+                                   blank=True)
     image_url = models.CharField(name="imageUrl", 
                                  max_length=255, 
                                  default="",
@@ -46,10 +46,10 @@ class News(models.Model):
     country = models.CharField(name="country", 
                                max_length=32, 
                                default="",
-                                     blank=True)
+                               blank=True)
     n_tokens = models.SmallIntegerField(name="nTokens",  
                                         default=-1,
-                                     blank=True)
+                                        blank=True)
     
     class Meta:
         # Change the table name to "new_table_name"
