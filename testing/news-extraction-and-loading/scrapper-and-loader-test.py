@@ -56,20 +56,22 @@ file_manager = FileManager()
 file_manager.add_files([
     FILE_NAME_EXTRACTION_ERRORS
     ])
-DB_NAME_NEWS = os.path.join(PATH_DATA, "news_db.sqlite3")
+DB_NAME_NEWS = os.path.join("../../", "fast_news.sqlite3")
 # Dates and times
 TODAY_LOCAL_DATETIME = datetime.now().replace(tzinfo=timezone.utc)
 CURRENT_DATE, CURRENT_TIME = str(datetime.today()).split(" ")
 # Data structures
-ORDER_KEYS = ("title",
-              "body", 
-              "source",
-              "country",
+ORDER_KEYS = ("url",
+              "media_url",
               "creation_datetime",
-              "modified_datetime",
-              "url",
-              "image",
-              "tags",
+              "update_datetime",
+              "title",
+              "description",
+              "body", 
+              "main_topic",
+              "other_topic",
+              "image_url",
+              "country",
               "n_tokens"
               )
 HEADERS = {
@@ -155,8 +157,10 @@ def extract_data_from_jsons(html: BeautifulSoup,
                             ) -> tuple[dict, dict]:
     data_extracted = {}
     title_found = False
+    description_found = False
     body_found = False
-    tags_found = False
+    main_topic_found = False
+    other_tag_found = False
     type_found = False
     creation_datetime_found = False
     modified_datetime_found = False
@@ -209,33 +213,44 @@ def extract_data_from_jsons(html: BeautifulSoup,
                 if body_found:
                     extraction_completed = True
                 continue
+            if not description_found and "description" in k:
+                data_extracted["description"] = json_values
+                description_found = True
             if not creation_datetime_found and "datePublished" in k:
                 data_extracted["creation_datetime"] = json_values
                 creation_datetime_found = True
             if not modified_datetime_found and "dateModified" in k:
                 data_extracted["modified_datetime"] = json_values
                 modified_datetime_found = True
-            if not title_found == "headline" in k:
+            if not title_found and "headline" in k:
                 data_extracted["title"] = json_values
                 title_found = True
-            if not tags_found and ("keywords" in k or "tags" in k):
+            if not main_topic_found and "articleSection" in k:
+                if isinstance(json_values, (dict, )): 
+                    data_extracted["main_topic"] = json_values["@list"][0]
+                else:
+                    data_extracted["main_topic"] = json_values
+                main_topic_found = True
+            if not other_tag_found and ("keywords" in k or "tags" in k):
                 if not json_values:
                     continue
                 if isinstance(json_values, (tuple, list)):
-                    data_extracted["tags"] = ";".join(json_values)
+                    data_extracted["other_topic"] = ";".join(json_values)
                 elif isinstance(json_values, str):
                     if ", " in json_values:
-                        data_extracted["tags"] = json_values.replace(", ", ",")
+                        data_extracted["other_topic"] = json_values.replace(", ", ",")
                     else:
-                        data_extracted["tags"] = json_values
+                        data_extracted["other_topic"] = json_values
                 else:
                     continue
-                tags_found = True
+                other_tag_found = True
             if all((title_found, 
+                    description_found,
                     body_found,
                     creation_datetime_found,
                     modified_datetime_found,
-                    tags_found,
+                    main_topic_found,
+                    other_tag_found,
                     )):
                 extraction_completed = True
                 break
@@ -251,6 +266,10 @@ def extract_data_from_metadata(parsed_html: BeautifulSoup,
         title_found = True
     else:
         title_found = False
+    if data_input.get("description", False):
+        description_found = True
+    else:
+        description_found = False
     if data_input.get("creation_datetime", False):
         creation_datetime_found = True
     else:
@@ -259,10 +278,14 @@ def extract_data_from_metadata(parsed_html: BeautifulSoup,
         modified_datetime_found = True
     else:
         modified_datetime_found = False
-    if data_input.get("tags", False):
-        tags_found = True
+    if data_input.get("main_topic", False):
+        main_topic_found = True
     else:
-        tags_found = False
+        main_topic_found = False
+    if data_input.get("other_topic", False):
+        other_topic_found = True
+    else:
+        other_topic_found = False
 
     extraction_completed = False
     meta_tags = parsed_html.select("html head meta[property],[name]")
@@ -284,27 +307,35 @@ def extract_data_from_metadata(parsed_html: BeautifulSoup,
         if not title_found and "title" in attribute_val:
             data_extacted["title"] = meta_content
             title_found = True
+        if not description_found and "description" in attribute_val:
+            data_extacted["description"] = meta_content
+            description_found = True
         #if not creation_datetime_found and ("publish" in attribute_val and "time" in attribute_val):
         if not creation_datetime_found and re.search(r"publish(?:ed)?_?(?:time|date)", attribute_val):
             data_extacted["creation_datetime"] = meta_content
             creation_datetime_found = True
-        if not tags_found and "keyword" in attribute_val:
+        if not main_topic_found and "section" in attribute_val:
+            data_extacted["main_topic"] = meta_content
+            main_topic_found = True
+        if not other_topic_found and "keyword" in attribute_val:
             if ", " in meta_content:
-                data_extacted["tags"] = meta_content.replace(", ", ",")
+                data_extacted["other_topic"] = meta_content.replace(", ", ",")
             else:
-                data_extacted["tags"] = meta_content
-            tags_found = True
+                data_extacted["other_topic"] = meta_content
+            other_topic_found = True
         #if not modified_datetime_found and ("modif" in attribute_val and "time" in attribute_val):
         if not modified_datetime_found and re.search(r"modif(?:ied)?_?(?:time|date)", attribute_val):
             data_extacted["modified_datetime"] = meta_content
             modified_datetime_found = True
         if not image_found and attribute_val.endswith("image"):
-            data_extacted["image"] = meta_content
+            data_extacted["image_url"] = meta_content
             image_found = True
         if all((title_found, 
+                description_found,
                 creation_datetime_found,
                 modified_datetime_found,
-                tags_found,
+                main_topic_found,
+                other_topic_found,
                 image_found
                 )):
             extraction_completed = True
@@ -360,12 +391,12 @@ def extract_keys_with_gpt(parsed_code: BeautifulSoup) -> dict:
         data = {
             "n_tokens": n_tokens,
             "title": title,
-            "tags": tags,
+            "other_topic": tags,
             "creation_datetime": creation_datetime,
             "modified_datetime": modified_datetime,
             "body": body
             }
-        data["image"] = ""
+        data["image_url"] = ""
 
         return data
     else:
@@ -396,7 +427,8 @@ def get_body_summary(text: str,
                      ) -> tuple[str, str]:
     if BLOCK_API_CALL:
         #return ("noarticlebody", -1), {"status_code": STATUS_0, "id": ""}
-        return (text, -1), {"status_code": STATUS_0, "id": ""}
+        return (text, -1), {"status_code": STATUS_0, 
+                            "id": ""}
     try:
         openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
@@ -420,7 +452,8 @@ def get_body_summary(text: str,
     if "BodyNotFound" in body_summary:
         body_summary = text
         n_tokens = -1
-    return (body_summary, n_tokens), {"status_code": STATUS_0, "id": ""}
+    return (body_summary, n_tokens), {"status_code": STATUS_0, 
+                                      "id": ""}
 
 def treat_raw_news_urls(news_urls: list, 
                         media_url: str,
@@ -449,7 +482,7 @@ def treat_raw_news_urls(news_urls: list,
     print(f"Read; extracted;to_process: {len(select_urls)}, {len(extracted_urls)}, {len(novel_news_to_process)}, {len(extracted_urls) >= len(novel_news_to_process)}")
     # Process new news
     news_data, n_no_body = find_news_data(novel_news_to_process, 
-                                          author=media_url,
+                                          media_url=media_url,
                                           pid=pid,
                                           order_keys=True) # ordered
     if news_data:
@@ -520,7 +553,7 @@ def find_valid_news_urls(news_urls: list,
     return list(set(valid_news_urls)), cache
 
 def find_news_data(news_urls: list, 
-                   author: str,
+                   media_url: str,
                    pid: str,
                    order_keys=False
                    ):
@@ -593,7 +626,7 @@ def find_news_data(news_urls: list,
 
         data["country"] = parsed_news_hmtl.html.attrs.get("lang", "")
         # TODO complete this
-        data["source"] = author
+        data["media_url"] = media_url
         data["url"] = news_url
         if order_keys:
             news_media_data.append(order_dict_keys(data))
@@ -609,19 +642,20 @@ def order_dict_keys(keys_values: list[dict],
         return {target_k: keys_values.get(target_k, "")  for target_k in ORDER_KEYS}
     
 def read_stored_news(where_params):
-    with sqlite3.connect(DB_NAME_NEWS, timeout=DB_TIMEOUT) as conn:
+    with sqlite3.connect(DB_NAME_NEWS, 
+                         timeout=DB_TIMEOUT) as conn:
         cursor = conn.cursor()
-        create_news_table(conn, 
-                        cursor)
+        #create_news_table(conn, 
+        #                cursor)
         if not isinstance(where_params, (tuple, list)):
             where_params = (where_params, )
         query_str = """
             SELECT 
                 url
             FROM 
-                News
+                news
             WHERE
-                source = ?;
+                mediaUrl = ?;
             """
         output = cursor.execute(query_str, where_params)
         conn.commit()
@@ -630,19 +664,20 @@ def read_stored_news(where_params):
 def create_news_table(conn, 
                       cursor):
     query_str = """
-        CREATE TABLE IF NOT EXISTS News (
+        CREATE TABLE IF NOT EXISTS news (
             title TEXT NOT NULL,
-            article TEXT NOT NULL,
-            source TEXT,
+            description TEXT NOT NULL,
+            articleBody TEXT NOT NULL,
+            mediaUrl TEXT,
             country TEXT,
             creationDate TEXT NOT NULL,
             updateDate TEXT,
             url TEXT PRIMARY KEY NOT NULL,
-            image_url TEXT,
-            tags TEXT,
+            imageUrl TEXT,
+            mainTopic TEXT,
+            otherTopic TEXT,
             insertDate Text NOT NULL,
-            changeDate Text,
-            number_tokens Integer
+            nTokens Integer
         )
             ;
         """
@@ -653,37 +688,40 @@ def insert_news(data: tuple[tuple]):
     with sqlite3.connect(DB_NAME_NEWS, 
                          timeout=DB_TIMEOUT) as conn:
         cursor = conn.cursor()
-        create_news_table(conn, 
-                          cursor)
+        #create_news_table(conn, 
+        #                  cursor)
         #datetime('now','localtime'),
         query_str = f"""
-            INSERT INTO News
-                (title,
-                article,
-                source,
-                country,
-                creationDate,
-                updateDate,
+            INSERT INTO news
+                (
                 url,
-                image_url,
-                tags,
+                mediaUrl,
+                creationDate,
                 insertDate,
-                changeDate,
-                number_tokens
+                updateDate,    
+                title,
+                description,
+                articleBody,
+                mainTopic,
+                otherTopic,
+                imageUrl,
+                country,
+                nTokens
                 )
                     VALUES
                 (
                     ?,
                     ?,
                     ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
                     DATETIME('now', 'localtime'),
-                    '',
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
                     ?
                 )
                 ;
