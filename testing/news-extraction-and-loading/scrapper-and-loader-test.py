@@ -11,7 +11,6 @@ import json
 import os
 import glob
 import multiprocessing
-from tqdm import tqdm
 
 from utilities import *
 # Classes
@@ -56,7 +55,7 @@ file_manager = FileManager()
 file_manager.add_files([
     FILE_NAME_EXTRACTION_ERRORS
     ])
-DB_NAME_NEWS = os.path.join("../../", "fast_news.sqlite3")
+DB_NAME_NEWS = os.path.join("../../", "db.sqlite3")
 # Dates and times
 TODAY_LOCAL_DATETIME = datetime.now().replace(tzinfo=timezone.utc)
 CURRENT_DATE, CURRENT_TIME = str(datetime.today()).split(" ")
@@ -72,7 +71,8 @@ ORDER_KEYS = ("url",
               "other_topic",
               "image_url",
               "country",
-              "n_tokens"
+              "n_tokens",
+              "score"
               )
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
@@ -457,6 +457,7 @@ def get_body_summary(text: str,
 
 def treat_raw_news_urls(news_urls: list, 
                         media_url: str,
+                        score: float,
                         pid: str
                         ):
     
@@ -464,10 +465,12 @@ def treat_raw_news_urls(news_urls: list,
     urls = find_valid_news_urls(news_urls,
                                 media_url)
     lock = multiprocessing.Lock()
+    print(f"WAITING READ table. Process {id}")
     with lock:
         select_urls = pd.DataFrame(read_stored_news(media_url), 
                            columns=["in_store"]
                            )
+    print(f"LEAVING READ table. Process {id}")
     extracted_urls = pd.DataFrame(urls, 
                                   columns=["in_extraction"]
                                   ).drop_duplicates()
@@ -483,6 +486,7 @@ def treat_raw_news_urls(news_urls: list,
     # Process new news
     news_data, n_no_body = find_news_data(novel_news_to_process, 
                                           media_url=media_url,
+                                          score=score,
                                           pid=pid,
                                           order_keys=True) # ordered
     if news_data:
@@ -554,6 +558,7 @@ def find_valid_news_urls(news_urls: list,
 
 def find_news_data(news_urls: list, 
                    media_url: str,
+                   score: float,
                    pid: str,
                    order_keys=False
                    ):
@@ -566,22 +571,22 @@ def find_news_data(news_urls: list,
                                          timeout=MEDIA_GET_REQ_TIMEOUT,
                                          )
         except requests.exceptions.TooManyRedirects as e1:
-            print(news_url, "An error 1 occurred:", e1)
+            print("An error 1 occurred; news request:", news_url, e1)
             file_manager.write_on_file(FILE_NAME_EXTRACTION_ERRORS, 
                                        [{"status_code": STATUS_1_1, "id": news_url}])
             continue
         except requests.exceptions.RequestException as e2:
-            print(news_url, "An error 2 occurred:", e2)
+            print("An error 2 occurred; news request:", news_url, e2)
             file_manager.write_on_file(FILE_NAME_EXTRACTION_ERRORS, 
                                        [{"status_code": STATUS_1_2, "id": news_url}])
             continue
         except UnicodeDecodeError as e3:
-            print(news_url, "An error 3 occurred:", e3)
+            print("An error 3 occurred; news request:", news_url, e3)
             file_manager.write_on_file(FILE_NAME_EXTRACTION_ERRORS, 
                                        [{"status_code": STATUS_1_3, "id": news_url}])
             continue
         except Exception as e4:
-            print(news_url, "An error 4 occurred:", e4)
+            print("An error 4 occurred; news request:", news_url, e4)
             file_manager.write_on_file(FILE_NAME_EXTRACTION_ERRORS, 
                                        [{"status_code": STATUS_1_2, "id": news_url}])
             continue
@@ -628,6 +633,7 @@ def find_news_data(news_urls: list,
         # TODO complete this
         data["media_url"] = media_url
         data["url"] = news_url
+        data["score"] = score
         if order_keys:
             news_media_data.append(order_dict_keys(data))
         else:
@@ -678,7 +684,7 @@ def create_news_table(conn,
             otherTopic TEXT,
             insertDate Text NOT NULL,
             nTokens Integer
-        )
+            )
             ;
         """
     cursor.execute(query_str)
@@ -706,7 +712,9 @@ def insert_news(data: tuple[tuple]):
                 otherTopic,
                 imageUrl,
                 country,
-                nTokens
+                nTokens,
+                score,
+                preprocessed
                 )
                     VALUES
                 (
@@ -722,7 +730,9 @@ def insert_news(data: tuple[tuple]):
                     ?,
                     ?,
                     ?,
-                    ?
+                    ?,
+                    ?,
+                    False
                 )
                 ;
             """
@@ -767,9 +777,9 @@ def _split_files(file_path: str,
                  n_splits: int
                  ):
     # Split the input file into chunks
-    sections = pd.read_csv(file_path, 
+    sections_data = pd.read_csv(file_path, 
                            sep=";")
-    medias = sections["media"].tolist()
+    medias = sections_data["domain"].tolist()
     unique_medias =  list(set(medias))
     chunk_size = len(unique_medias) // n_splits
     end = len(unique_medias)
@@ -784,9 +794,10 @@ def _split_files(file_path: str,
             submedias = unique_medias[i:i + chunk_size + remainder]
         subchanks = []
         for submedia in submedias:
-            temp = sections.loc[sections["media"] == submedia]
-            sections_chunk = temp["section"] + ";" + temp["media"]
-            subchanks.extend(sections_chunk.tolist())
+            temp = sections_data.loc[sections_data["domain"] == submedia]
+            sections_data_chunk = temp["section"] + ";" + temp["domain"] + ";" + temp["score"].astype(str)
+            #sections_data_chunk = temp[["section", "domain", "score"]]
+            subchanks.extend(sections_data_chunk)
         chunks.append(subchanks)
     return chunks
 
@@ -807,7 +818,8 @@ def main_multi_threading_process(sections_chunk: list,
     n_no_body = 0
     for i, row_section_and_media in enumerate(sections_chunk):
         #media = re.search("(https?://[^/]+/)", section_url).groups()[0]
-        section_url, input_media = row_section_and_media.split(";")
+        section_url, input_media, score = row_section_and_media.split(";")
+        score = float(score)
         section_url = section_url.strip()
         if not input_media.startswith("https://"):
             input_media = "https://" + input_media
@@ -856,6 +868,7 @@ def main_multi_threading_process(sections_chunk: list,
             unique_same_media_urls = list(set(same_media_news_urls))
             n1, n2 = treat_raw_news_urls(unique_same_media_urls, 
                                          last_same_media,
+                                         score,
                                          str(pid)
                                          )
             n_processed += n1
@@ -868,6 +881,7 @@ def main_multi_threading_process(sections_chunk: list,
     unique_same_media_urls = list(set(same_media_news_urls))
     n1, n2 = treat_raw_news_urls(unique_same_media_urls,
                                  last_same_media,
+                                 score,
                                  str(pid)
                                  )
     n_processed += n1
