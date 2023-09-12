@@ -1,1 +1,1 @@
-Get request timeout exception at https://www.elperiodicodearagon.com/sucesos/
+Get request timeout exception at https://www.laopiniondemalaga.es/internacional/

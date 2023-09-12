@@ -50,7 +50,13 @@ class News(models.Model):
     n_tokens = models.SmallIntegerField(name="nTokens",  
                                         default=-1,
                                         blank=True)
-    
+    score = models.FloatField(name="score",
+                              default=0.0,
+                              blank=False
+                              )
+    preprocessed = models.BooleanField(name="preprocessed",  
+                                       default=False,
+                                       blank=0)
     class Meta:
         # Change the table name to "new_table_name"
         db_table = 'news'

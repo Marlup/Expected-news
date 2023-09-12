@@ -1,50 +1,60 @@
-El País;elpais.com
-ABC;abc.es
-La Vanguardia;lavanguardia.com
-El Español;elespanol.com
-El Mundo;elmundo.es
-El Periódico de Catalunya;elperiodico.com
-La Razón;larazon.es
-Europa Press;europapress.es
-20 Minutos;20minutos.es
-El Confidencial;elconfidencial.com
-elDiario.es;eldiario.es
-ABC de Sevilla;sevilla.abc.es
-La Voz de Galicia;lavozdegalicia.es
-Libertad Digital;libertaddigital.com
-Crónica global;cronicaglobal.elespanol.com
-El Correo Español;elcorreo.com
-SUR;diariosur.es
-Diario de Sevilla;diariodesevilla.es
-El Diario Vasco;diariovasco.com
-Huffington Post España;huffingtonpost.es
-Levante;levante-emv.com
-Las Provincias;lasprovincias.es
-La Verdad;laverdad.es
-Heraldo de Aragón;heraldo.es
-Faro de Vigo;farodevigo.es
-Ideal;ideal.es
-El Periódico de España;epe.es
-Publico;publico.es
-Diario de Mallorca;diariodemallorca.es
-Canarias 7;canarias7.es
-La Información;lainformacion.com
-OK Diario;okdiario.com
-Periodista Digital;periodistadigital.com
-DEIA;deia.eus
-El Comercio;elcomercio.es
-Hoy de Badajoz;hoy.es
-La Nueva España;lne.es
-Información;informacion.es
-El Diario Montañes;eldiariomontanes.es
-Diario de Cádiz;diariodecadiz.es
-La Rioja;larioja.com
-República;republica.com
-Diario de Noticias;noticiasdenavarra.com
-Última Hora;ultimahora.es
-El Plural;elplural.com
-El Correo Gallego;elcorreogallego.es
-El Periódico de Aragón;elperiodicodearagon.com
-El Día;eldia.es
-Diario de Córdoba;diariocordoba.com
-El Confidencial Digital;elconfidencialdigital.com
+El País;elpais.com;84.5
+ABC;abc.es;78.25
+La Vanguardia;lavanguardia.com;76.75
+El Español;elespanol.com;76.75
+El Mundo;elmundo.es;74.75
+El Periódico de Catalunya;elperiodico.com;72.75
+La Razón;larazon.es;71.25
+Europa Press;europapress.es;71.25
+20 Minutos;20minutos.es;70.75
+El Confidencial;elconfidencial.com;69.25
+elDiario.es;eldiario.es;69.25
+ABC de Sevilla;sevilla.abc.es;68.25
+La Voz de Galicia;lavozdegalicia.es;67.5
+Libertad Digital;libertaddigital.com;67.5
+Crónica global;cronicaglobal.elespanol.com;66.25
+El Correo Español;elcorreo.com;66.0
+SUR;diariosur.es;66.0
+Diario de Sevilla;diariodesevilla.es;66.0
+El Diario Vasco;diariovasco.com;65.0
+Huffington Post España;huffingtonpost.es;64.75
+Levante;levante-emv.com;64.75
+Las Provincias;lasprovincias.es;64.25
+La Verdad;laverdad.es;64.25
+Heraldo de Aragón;heraldo.es;63.5
+Faro de Vigo;farodevigo.es;63.25
+Ideal;ideal.es;63.0
+El Periódico de España;epe.es;62.5
+Publico;publico.es;62.25
+Diario de Mallorca;diariodemallorca.es;61.75
+Canarias 7;canarias7.es;61.5
+La Información;lainformacion.com;61.5
+OK Diario;okdiario.com;61.5
+Periodista Digital;periodistadigital.com;61.5
+DEIA;deia.eus;61.0
+El Comercio;elcomercio.es;60.5
+Hoy de Badajoz;hoy.es;60.25
+La Nueva España;lne.es;60.25
+Información;informacion.es;59.75
+El Diario Montañes;eldiariomontanes.es;59.75
+Diario de Cádiz;diariodecadiz.es;59.75
+La Rioja;larioja.com;59.5
+República;republica.com;59.5
+Diario de Noticias;noticiasdenavarra.com;59.25
+Última Hora;ultimahora.es;59.25
+El Plural;elplural.com;59.0
+El Correo Gallego;elcorreogallego.es;58.5
+El Periódico de Aragón;elperiodicodearagon.com;58.5
+El Día;eldia.es;58.25
+Diario de Córdoba;diariocordoba.com;58.25
+El Confidencial Digital;elconfidencialdigital.com;58.25
+El Periódico de Extremadura;elperiodicoextremadura.com;58.0
+La voz;lavozdigital.es;56.75
+Diario de león;diariodeleon.es;56.75
+Mediterráneo;elperiodicomediterraneo.com;56.75
+El Norte de Castilla;elnortedecastilla.es;56.5
+La Opinión de Málaga;laopiniondemalaga.es;56.5
+La Opinión de Zamora;laopiniondezamora.es;56.5
+Agencia Efe;efe.com;55.75
+El Progreso;elprogreso.es;55.75
+La Opinión A Coruña;laopinioncoruna.es;55.75

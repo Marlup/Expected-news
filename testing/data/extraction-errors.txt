@@ -11251,3 +11251,9 @@
 1_1;https://sevilla.abc.es/motor/fecha-limite-usar-triangulos-emergencia-cambiarlos-balizas-20221120193225-nts.html
 1_1;https://www.farodevigo.es/finanzas-personales/2022/07/23/mejores-trucos-ahorrar-vacaciones-disfrutar-15494136.html
 1_1;https://www.informacion.es/buscando-respuestas/2023/07/05/avispas-abejas-prevenir-tratar-picaduras-52047374.html
+1_2;https://www.publico.es/deportes/mollejo-celebra-gol-rubiales-gesto-sera-denunciado-liga.html
+1_2;https://www.publico.es/sociedad/muere-futbolista-canaria-naomi-mendoza-17-anos.html
+1_2;https://www.publico.es/sociedad/curso-escolar-empezado-huelga-docentes-catalunya.html
+1_2;https://www.publico.es/sociedad/piers-morgan-periodista-polemico-actitudes-machistas-rubiales-dio-exclusiva.html
+1_2;https://www.informacion.es/elecciones/municipales/2023/05/28/elecciones-alicante-directo-resultados-sondeos-pactos-como-van-ultimas-noticias-28m-87708991.html
+1_1;https://www.informacion.es/buscando-respuestas/2023/07/05/avispas-abejas-prevenir-tratar-picaduras-52047374.html

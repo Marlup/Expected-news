@@ -12,11 +12,14 @@ def view_main_feed(request,
                                     "title",
                                     "description", 
                                     "articleBody", 
-                                    "imageUrl"
+                                    "imageUrl",
+                                    "score",
+                                    "preprocessed"
                                     )
     
-    # "-column", means order by column descending order
-    rows = query_set.order_by("-creationDate").all()[:n_rows]
+    query_set = query_set.filter(preprocessed=1)
+    # "-column", means "order by column descending order"
+    rows = query_set.order_by("-creationDate", "-score").all()[:n_rows]
     data_context = {
         "rows": rows
     }
