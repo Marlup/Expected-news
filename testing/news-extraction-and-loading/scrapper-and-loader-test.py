@@ -12,7 +12,8 @@ import os
 import glob
 import multiprocessing
 
-from utilities import *
+import tools.utilities as ut
+from tools.constants import *
 # Classes
 class ErrorReporter(Exception):
     def __init__(self, message):
@@ -20,38 +21,9 @@ class ErrorReporter(Exception):
         super().__init__(message)
         with open("Errors log.txt", "w") as errors_file:
             errors_file.write(message)
-## Constants
-FULL_START = True
-BLOCK_API_CALL = True
-DB_TIMEOUT = 10.0
-MEDIA_GET_REQ_TIMEOUT = 8.0
-NEWS_ARTICLE_GET_REQ_TIMEOUT = 6.0
-SECONDS_IN_DAY = 86_400
-N_MAX_DAYS_OLD = 1
-NUM_CORES = 10
-MAX_N_MEDIAS = 50
-N_SAVE_CHECKPOINT = 5
-# Status codes
-STATUS_0 = "0"
-STATUS_1_1 = "1_1"
-STATUS_1_2 = "1_2"
-STATUS_1_3 = "1_3"
-STATUS_2 = "2"
-STATUS_3_1 = "3_1"
-STATUS_3_2 = "3_2"
-STATUS_3_3 = "3_3"
-STATUS_3_4 = "3_4"
-STATUS_3_5 = "3_5"
-STATUS_3_6 = "3_6"
-STATUS_4 = "4"
-# File names
-PATH_DATA = os.path.join("..", "data")
-FILE_NAME_EXTRACTION_ERRORS = os.path.join(PATH_DATA, "extraction-errors.txt")
-FILE_NAME_PROMPT_ROLE_KEYS = os.path.join(PATH_DATA, "role-prompt-keys-extraction.txt")
-FILE_NAME_PROMPT_ROLE_SUMMARY = os.path.join(PATH_DATA, "role-prompt-body-extraction.txt")
 # Database names
 # Managers instantiation
-file_manager = FileManager()
+file_manager = ut.FileManager()
 file_manager.add_files([
     FILE_NAME_EXTRACTION_ERRORS
     ])
@@ -105,7 +77,7 @@ node_ignore = ["europa",
 
 ## Decorators
 # Decorator function to handle inputs and error logging
-def error_logger(manager: FileManager,
+def error_logger(manager: ut.FileManager,
                  file_name: str
                  ):
     def decorator(target_func):
@@ -227,20 +199,20 @@ def extract_data_from_jsons(html: BeautifulSoup,
                 title_found = True
             if not main_topic_found and "articleSection" in k:
                 if isinstance(json_values, (dict, )): 
-                    data_extracted["main_topic"] = json_values["@list"][0]
+                    data_extracted["main_topic"] = json_values["@list"][0].lower()
                 else:
-                    data_extracted["main_topic"] = json_values
+                    data_extracted["main_topic"] = json_values.lower()
                 main_topic_found = True
             if not other_tag_found and ("keywords" in k or "tags" in k):
                 if not json_values:
                     continue
                 if isinstance(json_values, (tuple, list)):
-                    data_extracted["other_topic"] = ";".join(json_values)
+                    data_extracted["other_topic"] = ";".join(json_values).lower()
                 elif isinstance(json_values, str):
                     if ", " in json_values:
-                        data_extracted["other_topic"] = json_values.replace(", ", ",")
+                        data_extracted["other_topic"] = json_values.replace(", ", ",").lower()
                     else:
-                        data_extracted["other_topic"] = json_values
+                        data_extracted["other_topic"] = json_values.lower()
                 else:
                     continue
                 other_tag_found = True
@@ -315,13 +287,13 @@ def extract_data_from_metadata(parsed_html: BeautifulSoup,
             data_extacted["creation_datetime"] = meta_content
             creation_datetime_found = True
         if not main_topic_found and "section" in attribute_val:
-            data_extacted["main_topic"] = meta_content
+            data_extacted["main_topic"] = meta_content.lower()
             main_topic_found = True
         if not other_topic_found and "keyword" in attribute_val:
             if ", " in meta_content:
-                data_extacted["other_topic"] = meta_content.replace(", ", ",")
+                data_extacted["other_topic"] = meta_content.replace(", ", ",").lower()
             else:
-                data_extacted["other_topic"] = meta_content
+                data_extacted["other_topic"] = meta_content.lower()
             other_topic_found = True
         #if not modified_datetime_found and ("modif" in attribute_val and "time" in attribute_val):
         if not modified_datetime_found and re.search(r"modif(?:ied)?_?(?:time|date)", attribute_val):
@@ -461,7 +433,7 @@ def treat_raw_news_urls(news_urls: list,
                         pid: str
                         ):
     
-    media_stats_manager = StatisticsManager().restart_time()
+    media_stats_manager = ut.StatisticsManager().restart_time()
     urls = find_valid_news_urls(news_urls,
                                 media_url)
     lock = multiprocessing.Lock()
@@ -769,7 +741,7 @@ def split_file_and_process(sections_file_path: str,
 
     # Clean up the split files (optional)
     for i in range(num_splits):
-        save_news_checkpoint(str(i), "")
+        ut.save_checkpoint(str(i), "")
         split_file_path = os.path.join(PATH_DATA, f"sections_split_{i}.txt")
         os.remove(split_file_path)
 
@@ -805,13 +777,13 @@ def main_multi_threading_process(sections_chunk: list,
                                  pid: str
                                  ):
     # 1 Initialize reboot or not
-    media_checkpoint = read_news_checkpoint(pid)
+    media_checkpoint = ut.read_news_checkpoint(pid)
     if not media_checkpoint:
         checkpoint_started = False
     else:
         checkpoint_started = True
     # 1 End
-    media_stats_manager = StatisticsManager().restart_time()
+    media_stats_manager = ut.StatisticsManager().restart_time()
     last_same_media = ""
     same_media_news_urls = []
     n_processed = 0
@@ -876,7 +848,7 @@ def main_multi_threading_process(sections_chunk: list,
             same_media_news_urls = []
         same_media_news_urls.extend(clean_news_url)
         if not checkpoint_started and (i % N_SAVE_CHECKPOINT == 0):
-            save_news_checkpoint(pid, last_same_media)
+            ut.save_checkpoint(pid, last_same_media)
         last_same_media = input_media
     unique_same_media_urls = list(set(same_media_news_urls))
     n1, n2 = treat_raw_news_urls(unique_same_media_urls,
@@ -896,7 +868,7 @@ if __name__ == "__main__":
     print(f"\n...Datetime of process: {CURRENT_DATE} {CURRENT_TIME}...\n")
     if FULL_START:
         for i in range(NUM_CORES):
-            save_news_checkpoint(str(i), "")
+            ut.save_checkpoint(str(i), "")
 
     # Extract the last version
     version_n = max(int(x.split("_")[-1][1:-4]) for x in glob.glob("../data/final_url_sections_v*.csv"))
