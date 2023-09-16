@@ -61,13 +61,13 @@ def read_media_urls_file(file_path):
     with open(file_path, "r") as file:
         return json.load(file)
 
-def save_news_checkpoint(pid, last_media_url):
-    with open(os.path.join(PATH_DATA, f"extraction checkpoint_{pid}.json"), "w") as file:
-        json.dump({"last_media_url": last_media_url}, file)
+def save_checkpoint(pid, last_value):
+    with open(os.path.join(PATH_DATA, f"checkpoint_{pid}.json"), "w") as file:
+        json.dump({"last_value": last_value}, file)
 def read_news_checkpoint(pid: str):
-    with open(os.path.join(PATH_DATA, f"extraction checkpoint_{pid}.json"), "r") as file:
+    with open(os.path.join(PATH_DATA, f"checkpoint_{pid}.json"), "r") as file:
         data = json.load(file)
-        return data["last_media_url"]
+        return data["last_value"]
 
 def read_media_sections(pid: str):
     with open(os.path.join(PATH_DATA, f"media_sections_{pid}.txt"), "r") as file:

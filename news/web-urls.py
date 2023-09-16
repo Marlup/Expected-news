@@ -1,17 +1,14 @@
 from django.urls import path
-from .views import view_main_feed
+from .views import view_main_feed, view_main_feed_by_topic
 from django.conf import settings
 from django.conf.urls.static import static 
 
 urlpatterns = [
     path('', 
          view_main_feed, 
-         name='news_list'),
-    path('feed', 
-         view_main_feed, 
-         name='news_list'),
-    path('page=<int:page>/', 
-         view_main_feed, 
-         name='news_list'),
+         name='news-feed'),
+    path('/<str:topic>/', 
+         view_main_feed_by_topic, 
+         name='news-feed-topic'),
     ] + static(settings.STATIC_URL, 
                document_root=settings.STATIC_ROOT)
