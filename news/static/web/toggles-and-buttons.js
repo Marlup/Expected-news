@@ -85,6 +85,7 @@ input.addEventListener("keydown", (event) => {
         console.log("Search text:", input.value);
         //call_django_view(input.value)
         event.preventDefault();
-        window.location.href = `/${input.value}`
+        window.location.href = `http://localhost:8000/${input.value}`
+        console.log(window.location.href)
     }
 });

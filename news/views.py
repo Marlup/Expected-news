@@ -37,8 +37,8 @@ def view_main_feed_by_topic(request,
                                     "imageUrl",
                                     "score",
                                     "preprocessed"
-                                    )
-    query_set.filter(mainTopic__icontains=topic.strip())
+                                    ) \
+                            .filter(mainTopic__icontains=topic)
     return _view_main_feed(request, 
                            PATH_HTML_FEED_TOPIC,
                            query_set, 
@@ -59,3 +59,30 @@ def _view_main_feed(request,
         return render(request, 
                       path, 
                       data_context)
+
+
+def view_main_feed_by_topic2(request, 
+                            topic,
+                            n_rows=N_SHOWN_FEED_ROWS):
+    rows = News.objects.filter(preprocessed=True, 
+                               mainTopic__icontains=topic) \
+                       .values("url",
+                               "creationDate",
+                               "insertDate", 
+                               "title",
+                               "description", 
+                               "articleBody", 
+                               "mainTopic",
+                               "imageUrl",
+                               "score",
+                               "preprocessed"
+                               ) \
+                       .order_by("-creationDate", 
+                                 "-score") \
+                       .all()[:n_rows]
+    data_context = {
+          "rows": rows
+          }
+    return render(request, 
+                    PATH_HTML_FEED_TOPIC, 
+                    data_context)
