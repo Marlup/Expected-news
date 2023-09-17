@@ -68,6 +68,7 @@ def get_more_news_by_topic(request,
     query = _base_query().filter(mainTopic__icontains=topic)
     rows = _end_query(query, 
                       offset)
+    
     return JsonResponse({"rows": list(rows)}, 
                         content_type="application/json"
                         )
