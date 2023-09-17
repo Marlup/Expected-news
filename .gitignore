@@ -1,1 +1,3 @@
 process_*.csv
+manage.py
+env/
