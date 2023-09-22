@@ -4,4 +4,4 @@ N_ELEMENTS_LOAD = 10
 ## Paths ##
 # Template
 PATH_HTML_FEED = './web/feed.html'
-#PATH_HTML_FEED_BY_TOPIC = './web/feed-by-topic.html'
+#PATH_HTML_FEED_BY_TOPIC = './web/feed_by_topic.html'

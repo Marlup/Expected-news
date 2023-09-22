@@ -1,3 +1,6 @@
-process_*.csv
+/testing/data/statistics/webscraping/processes_*/*
+/testing/data/errors*/*
 manage.py
-env/
+/env/
+/testing/*/obsolete/
+db.sqlite3
