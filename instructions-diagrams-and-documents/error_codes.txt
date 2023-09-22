@@ -1,0 +1,26 @@
+*****************
+* Status codes: *
+*****************
+0 - OK
+1 - general invalid request
+    1.1 - too many request retries attempted
+    1.2 - ambiguous invalid request error
+    1.3 - unicode error
+2 - general web is not an article
+3 - general invalid url
+    3.1 - equal news and media url
+    3.2 - invalid file type from news url
+    3.3 - process-irrelevant news url node
+    3.4 - there is not a node in news url
+    3.5 - not-long-enough end-node in news url
+    3.6 - media url is not contained in news url
+4 - general gpt api error
+5 - general data/metadata extraction error
+    5.1 - unknown data/metadata error
+    	  
+    5.2 - meta tag with property attribute and published_data value not found
+    5.3 - empty value (i.e. published_data) in content attribute from meta tag
+    5.4 - published_date found, but older than 
+    	  current date - N_MAX_DAYS_OLD (constant)
+    5.5 - title/headline or published_date not found
+    5.6 - article body not found

@@ -16,13 +16,24 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
-from news.views import view_main_feed, view_main_feed_by_topic
+from news.views import (
+    view_feed,
+    view_feed_by_topic,
+    get_more_news,
+    get_more_news_by_topic
+)
 
 urlpatterns = [
     path('admin/', 
          admin.site.urls),
     path('', 
-         view_main_feed), # Default page 
+         view_feed), # Default page 
     path('<str:topic>/',
-         view_main_feed_by_topic) # Defined list displaying
+         view_feed_by_topic), # Defined list displaying,
+    path('get_more_news/<int:offset>/', 
+         get_more_news, 
+         name='get-more-news'),
+    path('get_more_news/<str:topic>&<int:offset>/', 
+         get_more_news_by_topic, 
+         name='get-more-news-by-topic')
 ]
