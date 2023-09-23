@@ -116,7 +116,7 @@ window.addEventListener("scroll", () => {
 function isAtBottom() {
     const windowHeight = window.innerHeight;
     const documentHeight = document.documentElement.scrollHeight;
-    const scrollTop = window.scrollY || window.pageYOffset;
+    const scrollTop = window.scrollY;
   
     // Adjust the threshold value as needed
     const threshold = 100;
