@@ -57,7 +57,7 @@ if not BLOCK_API_CALL:
 #    prompt_role = file.read()
 with open(FILE_PATH_PROMPT_ROLE_SUMMARY, "r") as file:
     prompt_role_summary = file.read()
-regex_url_has_query = re.compile("[?=&+%@#]{1}")
+regex_url_has_query = re.compile("[?!)(=&+%@#]{1}")
 regex_too_short_url_end = re.compile(r"^[.a-zA-Z0-9]+(-[.a-zA-Z0-9]+){,2}$")
 regex_url_startswith_https = re.compile("https?:[\/]{2}")
 regex_title = re.compile("title|headline|titular|titulo")
@@ -481,10 +481,10 @@ def treat_raw_urls(raw_urls: list,
             lock = mp.Lock()
             with lock:
                 insert_news(news_data)
-                print("Rows inserted:", len(news_data))
+                print("Rows inserted:", len(news_data), "\n")
         # Statistics
         n_processed = len(news_data)
-        print(f"PID {str(os.getpid())} {media_url}; read {len(read_urls)}; extracted {len(extracted_urls)}; to process {len(novel_news_to_process)}; processed: {n_processed}\n")
+        print(f"\nPID {str(os.getpid())} {media_url}; read {len(read_urls)}; extracted {len(extracted_urls)}; to process {len(novel_news_to_process)}; processed: {n_processed}")
     else:
         n_processed = 0
         n_no_body = 0
@@ -579,7 +579,7 @@ def find_valid_urls(input_urls: list,
 def find_urls_data(news_urls: list, 
                    media_url: str,
                    score: float,
-                   order_keys=False
+                   order_keys=True
                    ):
     news_data = []
     garbage_urls = []
@@ -587,70 +587,36 @@ def find_urls_data(news_urls: list,
     for news_url in news_urls:
         data, code = _extract_data_from_news(news_url, 
                                              media_url,
-                                             score)
+                                             score,
+                                             order_keys)
         if not data:
             garbage_urls.append((news_url, media_url, code))
             if code == STATUS_5_6:
                 n_no_articlebody_in_article += 1
             continue
-        if order_keys:
-            news_data.append(order_dict_keys(data))
-        else:
-            news_data.append(data)
+        news_data.append(data)
+
     print("Garbage from data extraction:", len(garbage_urls))
     if garbage_urls:
         return (news_data, n_no_articlebody_in_article), {"has_garbage": False, "data": garbage_urls}
     else:
         return (news_data, n_no_articlebody_in_article), {"has_garbage": True, "data": garbage_urls}
-    
+
 def _extract_data_from_news(news_url: list, 
                             media_url: str,
-                            score: float):
-    data = {}
-    #file_name = str(os.getpid()) + "_" + FILE_NAME_EXTRACTION_ERRORS
-    try:
-        resp_url_news = requests.get(news_url, 
-                                     headers=HEADERS, 
-                                     timeout=MEDIA_GET_REQ_TIMEOUT,
-                                     )
-    except requests.exceptions.TooManyRedirects as e1:
-        #print("An error 1 occurred; news request:", news_url, e1)
-        #file_manager.write_on_file(file_name, 
-        #                           [{"status_code": STATUS_1_1, "id": news_url}])
-        return data, STATUS_1_1
-    except requests.exceptions.RequestException as e2:
-        #print("An error 2 occurred; news request:", news_url, e2)
-        #file_manager.write_on_file(file_name, 
-        #                           [{"status_code": STATUS_1_2, "id": news_url}])
-        return data, STATUS_1_2
-    except UnicodeDecodeError as e3:
-        #print("An error 3 occurred; news request:", news_url, e3)
-        #file_manager.write_on_file(file_name, 
-        #                           [{"status_code": STATUS_1_3, "id": news_url}])
-        return data, STATUS_1_3
-    except Exception as e4:
-        #print("An error 4 occurred; news request:", news_url, e4)
-        #file_manager.write_on_file(file_name, 
-        #                           [{"status_code": STATUS_1_2, "id": news_url}])
-        return data, STATUS_1_2
+                            score: float,
+                            order_keys: bool=True):
     
-    parsed_news_hmtl = BeautifulSoup(resp_url_news.content, 
+    response, code = _send_get_request(news_url)
+    if code != STATUS_0:
+        return {}, code
+    parsed_news_hmtl = BeautifulSoup(response.content, 
                                      "html.parser")
     # Accept or reject url if news date is more than N_MAX_DAYS_OLD days older
-    try:
-        meta_tag_published_time = parsed_news_hmtl.html.head.find("meta", 
-                                                                  attrs={"property": regex_published_time})
-        if meta_tag_published_time is None:
-            return data, STATUS_5_2
-        publ_tsm = meta_tag_published_time.attrs["content"]
-        if not publ_tsm:
-            return data, STATUS_5_3
-        dtime_diff = (TODAY_LOCAL_DATETIME - datetime.fromisoformat(publ_tsm)).total_seconds() / SECONDS_IN_DAY
-        if dtime_diff > N_MAX_DAYS_OLD:
-            return data, STATUS_5_4
-    except:
-        return data, STATUS_5_1
-    
+    code = filter_old_url(parsed_news_hmtl)
+    if code != STATUS_0:
+        return {}, code
+    data = {}
     extracted_data = extract_data_from_jsons(parsed_news_hmtl, 
                                              news_url,
                                              media_url
@@ -678,9 +644,56 @@ def _extract_data_from_news(news_url: list,
     data["media_url"] = media_url
     data["url"] = news_url
     data["score"] = score
+
+    if order_keys:
+        return order_dict_keys(data), STATUS_0
     return data, STATUS_0
 
-def order_dict_keys(keys_values: list[dict], 
+def _send_get_request(news_url: str):
+    try:
+        response = requests.get(news_url, 
+                                headers=HEADERS, 
+                                timeout=MEDIA_GET_REQ_TIMEOUT)
+    except requests.exceptions.TooManyRedirects as e1:
+        #print("An error 1 occurred; news request:", news_url, e1)
+        #file_manager.write_on_file(file_name, 
+        #                           [{"status_code": STATUS_1_1, "id": news_url}])
+        return None, STATUS_1_1
+    except requests.exceptions.RequestException as e2:
+        #print("An error 2 occurred; news request:", news_url, e2)
+        #file_manager.write_on_file(file_name, 
+        #                           [{"status_code": STATUS_1_2, "id": news_url}])
+        return None, STATUS_1_2
+    except UnicodeDecodeError as e3:
+        #print("An error 3 occurred; news request:", news_url, e3)
+        #file_manager.write_on_file(file_name, 
+        #                           [{"status_code": STATUS_1_3, "id": news_url}])
+        return None, STATUS_1_3
+    except Exception as e4:
+        #print("An error 4 occurred; news request:", news_url, e4)
+        #file_manager.write_on_file(file_name, 
+        #                           [{"status_code": STATUS_1_2, "id": news_url}])
+        return None, STATUS_1_2
+    return response, STATUS_0
+
+def filter_old_url(parsed_html):
+
+    try:
+        meta_tag_published_time = parsed_html.html.head.find("meta", 
+                                                             attrs={"property": regex_published_time})
+        if meta_tag_published_time is None:
+            return STATUS_5_2
+        publ_tsm = meta_tag_published_time.attrs["content"]
+        if not publ_tsm:
+            return STATUS_5_3
+        dtime_diff = (TODAY_LOCAL_DATETIME - datetime.fromisoformat(publ_tsm)).total_seconds() / SECONDS_IN_DAY
+        if dtime_diff > N_MAX_DAYS_OLD:
+            return STATUS_5_4
+    except:
+        return STATUS_5_1
+    return STATUS_0
+
+def order_dict_keys(keys_values: dict, 
                     only_values: bool=True):
     if only_values:
         return tuple([keys_values.get(target_k, "") for target_k in ORDER_KEYS])
@@ -859,7 +872,7 @@ def main_multi_threading_process(queued_media_data: dict):
                                                 # href=re.compile("https?:.*"))
             raw_urls = [x.attrs["href"] for x in tags_with_url if x.attrs.get("href", False)]
             for raw_url in raw_urls:
-                if re.search("[?=&+%@#]{1}", raw_url):
+                if regex_url_has_query.search(raw_url):
                     search_spec_char = regex_url_has_query.search(raw_url)
                     query_start_pos = search_spec_char.span()[0]
                     raw_url = raw_url[:query_start_pos]
@@ -885,6 +898,7 @@ def main_multi_threading_process(queued_media_data: dict):
                                     input_iso_datetime=TODAY_LOCAL_DATETIME,
                                     pid="summary"
                                     )
+
 if __name__ == "__main__":
     print(f"\n...Datetime of process: {CURRENT_DATE} {CURRENT_TIME}...\n")
     if FULL_START:

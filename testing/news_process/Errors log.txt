@@ -1,1 +1,1 @@
-Get request timeout exception at https://lavozdegalicia.es/galicia-economica/
+Get request timeout exception at https://www.elperiodicoextremadura.com/sucesos/

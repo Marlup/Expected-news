@@ -17,7 +17,7 @@ def main():
                                 news
                             WHERE 
                                 preprocessed = False
-                                AND DATETIME(creationDate, 'utc') >= DATETIME('now' 'localtime', '-2 days')
+                                AND DATETIME(creationDate, 'utc') >= DATETIME('now' 'localtime', 'utc', '-2 days')
                         """) \
                   .fetchall()
     
@@ -30,27 +30,19 @@ def main():
     df = df[df["desc"] != ""]
     df["score"] = df["score"] + 1
 
+    # Extract 1 random row from each 'desc' groupby
     index_one_random_from_groups = df.groupby("desc") \
                                      .sample(n=1, 
                                              weights="score") \
                                      .index
     not_index_one_random_from_groups = df.index.difference(index_one_random_from_groups)
+    # Filter out duplicates
     urls_preprocessed = df.iloc[index_one_random_from_groups]["url"].tolist()
     urls_preprocessed = tuple((x, ) for x in urls_preprocessed)
+    # Filter out fully processed rows
     urls_only_updated = df.iloc[not_index_one_random_from_groups]["url"].tolist()
     urls_only_updated = tuple((x, ) for x in urls_only_updated)
 
-    cur.executemany("""
-                    UPDATE
-                        news
-                    SET
-                        preprocessed = True
-                    WHERE
-                        url = ?
-                        AND DATETIME(creationDate, 'utc') >= DATETIME('now', 'localtime', '-2 days')
-                    """, 
-                    urls_preprocessed)
-    conn.commit()
     # Update with True preprocessed and non-empty updateDate
     cur.executemany("""
                     UPDATE  

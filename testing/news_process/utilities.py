@@ -208,7 +208,7 @@ class StatisticsManager():
             str datetime (y{sep}m{sep}d_H{sep}M{sep}S).
             str date (y{sep}m{sep}d).
         """
-        return iso_datetime.strftime(f"%Y{s}%m{s}%d_%H{s}%M{s}%S"), iso_datetime.strftime(f"%Y{s}%m{s}%d")
+        return iso_datetime.strftime(f"%Y{s}%m{s}%d_%H{s}%M{s}%S"), iso_datetime.strftime(f"%Y{s}%m{s}%d"), iso_datetime.strftime(f"%H{s}%M{s}%S")
 
     def write_stats(self, 
                     data, 
@@ -220,13 +220,13 @@ class StatisticsManager():
                     ):
         process_time = str(self.set_process_duration())
         if input_iso_datetime and isinstance(input_iso_datetime, datetime):
-            datetime_fmt, date = self._iso_datetime_to_str(input_iso_datetime)
+            datetime_fmt, date, time = self._iso_datetime_to_str(input_iso_datetime)
         else:
             process_dt = datetime.now().replace(tzinfo=timezone.utc)
-            datetime_fmt, date = self._iso_datetime_to_str(process_dt)
+            datetime_fmt, date, time = self._iso_datetime_to_str(process_dt)
         
         if not subfolder:
-            subfolder = f"processes_{date}"
+            subfolder = os.path.join(f"processes_{date}", time)
         if isinstance(data, tuple):
             data = list(data)
         if not os.path.exists(os.path.join(main_folder, subfolder)):
