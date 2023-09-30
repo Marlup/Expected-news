@@ -32,24 +32,6 @@ file_manager = ut.FileManager()
 # Dates and times
 TODAY_LOCAL_DATETIME = datetime.now().replace(tzinfo=timezone.utc)
 CURRENT_DATE, CURRENT_TIME = str(datetime.today()).split(" ")
-# Data structures
-ORDER_KEYS = ("url",
-              "media_url",
-              "creation_datetime",
-              "update_datetime",
-              "title",
-              "description",
-              "body", 
-              "main_topic",
-              "other_topic",
-              "image_url",
-              "country",
-              "n_tokens",
-              "score"
-              )
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
-}
 ## Dynamical global variables
 if not BLOCK_API_CALL:
     openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -72,16 +54,14 @@ regex_creation_datetime = re.compile("Creation DateTime: (.*).*", flags=re.DOTAL
 regex_update_datetime = re.compile("Update DateTime: (.*).*Body Summary", flags=re.DOTALL)
 regex_only_summary = re.compile("Body Summary:(.*)", flags=re.DOTALL)
 regex_published_time = re.compile(r"publish(?:ed)?_?(?:time|date)")
-node_ignore = ["europa", 
-               "africa",
-               "asia",
-               "oceania",
-               "prensadigital"
-              ]
 
+######################################################################
+##                         Functions                                ##
+######################################################################
 ## Decorators
-# Decorator function to handle inputs and error logging
+# handle inputs and error logging, and store them
 def error_logger(manager: ut.FileManager,
+                 
                  file_name: str
                  ):
     def decorator(target_func):
@@ -105,6 +85,7 @@ def error_logger(manager: ut.FileManager,
         return wrapper
     return decorator
 
+# handle invalid urls and store them in case they are new
 def garbage_logger():
     def decorator(target_func):
         def wrapper(*args, **kwargs):
@@ -117,35 +98,534 @@ def garbage_logger():
             return others
         return wrapper
     return decorator
+# END. Decorators
 
-## Functions
-def find_body_from_json(html: BeautifulSoup, 
-                        data: dict, 
-                        url: str,
-                        media: str
-                        ) -> dict:
-    data["body"] = ""
-    data["n_tokens"] = 0
-    jsons = html.find_all("script", 
-                          attrs={"type": re.compile("application[/]{1}ld[+]{1}json")})
-    for json_data_str in jsons:
-        json_data = json.loads(json_data_str.get_text(), strict=False)
-        if isinstance(json_data, list):
-            if json_data:
-                json_data = json_data[0]
-            else:
-                continue
-        if "articleBody" in json_data:
-            body, n_tokens = get_body_summary(remove_body_tags(json_data["articleBody"]), 
-                                              url,
-                                              media
-                                              )
-            data["body"] = body
-            data["n_tokens"] = n_tokens
-            break
+# OpenAI API calls
+def extract_keys_with_gpt(parsed_code: BeautifulSoup) -> dict:
+    #print("..Keys through gpt..")
+    tags_with_text = parsed_code.find_all(lambda tag: tag.name in ("p", "h1", "h2"))
+    text_clean_from_tags = "".join([re.sub("\n+", "\n", tag.get_text()) for tag in tags_with_text])
+    try:
+        openai_response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", 
+                 "content": prompt_role_summary},
+                {"role": "user", 
+                 "content": text_clean_from_tags},
+            ]
+        )
+        message_content = openai_response["choices"][0].message["content"]
+        try:
+            n_tokens = regex_n_tokens.search(message_content).groups()[0]
+        except:
+            n_tokens = -1
+        try:
+            title = regex_headline.search(message_content).groups()[0]
+        except:
+            title = ""
+        try:
+            tags = regex_topics.search(message_content).groups()[0]
+        except:
+            tags = ""
+        try:
+            creation_datetime = regex_creation_datetime.search(message_content).groups()[0]
+        except:
+            creation_datetime = ""
+        try:
+            modified_datetime = regex_update_datetime.search(message_content).groups()[0]
+        except:
+            modified_datetime = ""
+        try:
+            body = regex_only_summary.search(message_content).groups()[0]
+        except:
+            body = ""
+        data = {
+            "n_tokens": n_tokens,
+            "title": title,
+            "other_topic": tags,
+            "creation_datetime": creation_datetime,
+            "modified_datetime": modified_datetime,
+            "body": body
+            }
+        data["image_url"] = ""
+
+        return data
+    except Exception as e:
+        return {}
+
+def find_body_with_gpt(parsed_html: BeautifulSoup, 
+                       url: str,
+                       media: str
+                       ) -> dict:
+    tags_with_text = parsed_html.find_all(lambda tag: tag.name in ("p", ))
+    text_clean_from_tags = "".join([re.sub("\n+", "\n", tag.get_text()) for tag in tags_with_text])
+    #clean_paragraphs = clean_paragraphs.split("\n")[0]
+    #parag_texts = str({i: x if x else "\n" for i, x in enumerate(clean_paragraphs)})[1:-1]
+    body, n_tokens = get_body_summary(text_clean_from_tags, 
+                                      url,
+                                      media
+                                      )
+    data = {
+        "n_tokens": n_tokens,
+        "body": body
+    }
     return data
 
-def extract_data_from_jsons(html: BeautifulSoup, 
+@garbage_logger()
+def get_body_summary(text: str, 
+                     url: str,
+                     media: str
+                     ) -> tuple[str, str]:
+    if BLOCK_API_CALL:
+        #return (text, -1), {"status_code": STATUS_0, "id": ""}
+        return (text, -1), {"has_garbage": True, "data": []}
+    try:
+        openai_response = openai.ChatCompletion.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system", "content": prompt_role_summary},
+                {"role": "user", "content": text},
+            ]
+        )
+    except Exception as e:
+        #return ("", 0), {"status_code": STATUS_4, "id": url}
+        return ("", 0), {"has_garbage": False, "data": [(url, media, STATUS_4)]}
+    
+    message_content = openai_response["choices"][0].message["content"]
+    try:
+        n_tokens = regex_n_tokens.search(message_content).groups()[0]
+    except:
+        n_tokens = -1
+    try:
+        body_summary = regex_only_summary.search(message_content).groups()[0]
+    except:
+        body_summary = ""
+    if "BodyNotFound" in body_summary:
+        body_summary = text
+        n_tokens = -1
+    #return (body_summary, n_tokens), {"status_code": STATUS_0, "id": ""}
+    return (body_summary, n_tokens), {"has_garbage": True, "data": []}
+# END. OpenAI API calls
+
+# Multi-media-sections-process runner
+def run_multi_process(file_path: str, 
+                      num_processes: int, 
+                      process_function: function):
+    
+    with open(file_path, "r") as file:
+        data = json.load(file)
+
+    with mp.Manager() as manager:
+        sections_data = manager.dict(data)
+        # Create a process for each chunk and run in parallel
+        processes = []
+        for _ in range(num_processes):
+            process = mp.Process(target=process_function, 
+                                 args=(sections_data, )
+                                 )
+            processes.append(process)
+            process.start()
+        # Wait for all processes to finish
+        for process in processes:
+            process.join()
+
+def main_multi_threading_process(queued_media_data: dict):
+    pid = str(os.getpid())
+    file_manager.add_files([
+        pid + "_" + FILE_NAME_EXTRACTION_ERRORS
+        ])
+    # 1 Initialize reboot if needed
+    media_checkpoint = ut.read_news_checkpoint(pid, 
+                                               "w+")
+    if not media_checkpoint:
+        checkpoint_started = False
+    else:
+        checkpoint_started = True
+    # 1 End
+    media_stats_manager = ut.StatisticsManager().restart_time()
+    media_news_urls = []
+    n_processed = 0
+    n_no_body = 0
+    while len(queued_media_data) > 0:
+        # The Dict-proxy can safely remove items, as the multiprocessing.Manager()  
+        # takes care of the necessary internal locking mechanisms to ensure 
+        # safe concurrent access.
+        media_url, sections_and_scores = queued_media_data.popitem()
+        for i, (section_url, score) in enumerate(sections_and_scores["data"]):
+            score = float(score)
+            section_url = section_url.strip()
+            if not media_url.startswith("https://"):
+                media_url = "https://" + media_url
+            if checkpoint_started:
+                if media_url == media_checkpoint:
+                    checkpoint_started = False
+                else:
+                    continue
+            try:
+                response = requests.get(section_url, 
+                                        headers=HEADERS, 
+                                        timeout=NEWS_ARTICLE_GET_REQ_TIMEOUT)
+            except requests.exceptions.Timeout:
+                # Handle the timeout exception
+                print("The request timed out.")
+                ErrorReporter(f"Get request timeout exception at {section_url}")
+                continue
+            except requests.exceptions.RequestException as e:
+                # Handle other request exceptions
+                print(f"An error occurred: {str(e)}")
+                print("Retrying request without 'www'")
+                section_url = section_url.replace("www.", "")
+                response = requests.get(section_url, 
+                                        headers=HEADERS, 
+                                        timeout=NEWS_ARTICLE_GET_REQ_TIMEOUT)
+                #ErrorReporter(f"Get request general exception, {e}, at {section_url}")
+                media_url = media_url.replace("www.", "")
+                print("Request success without 'www'")
+            
+            parsed_hmtl = BeautifulSoup(response.content, 
+                                        "html.parser")
+            tags_with_url = parsed_hmtl.html.body \
+                                       .find_all("a", 
+                                                 href=re.compile(r"^(?:https:\/\/)?|^\/{1}[^\/].*|^www[.].*"))
+                                                # href=re.compile("https?:.*"))
+            raw_urls = [x.attrs["href"] for x in tags_with_url if x.attrs.get("href", False)]
+            for raw_url in raw_urls:
+                if regex_url_has_query.search(raw_url):
+                    search_spec_char = regex_url_has_query.search(raw_url)
+                    query_start_pos = search_spec_char.span()[0]
+                    raw_url = raw_url[:query_start_pos]
+                if raw_url.startswith("//"):
+                    raw_url = "https:" + raw_url
+                elif raw_url.startswith("/"):
+                    raw_url = media_url[:-1] + raw_url
+                elif raw_url.startswith("www.") or not raw_url.startswith("https://"):
+                    raw_url = "https://" + raw_url
+                media_news_urls.append(raw_url)
+        n1, n2 = treat_raw_urls(list(set(media_news_urls)), 
+                                     media_url,
+                                     score
+                                     )
+        n_processed += n1
+        n_no_body += n2
+        if not checkpoint_started and (i % N_SAVE_CHECKPOINT == 0):
+            ut.save_checkpoint(pid, 
+                               media_url)
+    media_stats_manager.write_stats(("Process summary", 
+                                    n_processed, 
+                                    n_no_body), 
+                                    input_iso_datetime=TODAY_LOCAL_DATETIME,
+                                    pid="summary"
+                                    )
+# END. Multi-media-sections-process runner
+
+# Search, compare, filter, validate extract and curate data
+def treat_raw_urls(raw_urls: list, 
+                   media_url: str,
+                   score: float):
+    
+    media_stats_manager = ut.StatisticsManager(True)
+    urls = find_valid_urls(raw_urls,
+                           media_url)
+    if urls:
+        lock = mp.Lock()
+        with lock:
+            read_urls = pd.DataFrame(read_stored_news(media_url), 
+                                     columns=["in_store"])
+        extracted_urls = pd.DataFrame(urls, 
+                                      columns=["in_extraction"]
+                                      ).drop_duplicates()
+        novel_news = read_urls.merge(extracted_urls, 
+                                     left_on="in_store", 
+                                     right_on="in_extraction", 
+                                     how="right")
+        # Merge extracted and loaded news in order to process the new ones
+        novel_news_to_process = novel_news \
+            .loc[novel_news.in_store.isnull(), "in_extraction"] \
+            .tolist()
+        
+        # Process new news
+        news_data, n_no_body = find_urls_data(novel_news_to_process, 
+                                              media_url=media_url,
+                                              score=score,
+                                              order_keys=True) # ordered
+        #print("Data:", news_data)
+        if news_data:
+            lock = mp.Lock()
+            with lock:
+                insert_news(news_data)
+                print("Rows inserted:", len(news_data), "\n")
+        # Statistics
+        n_processed = len(news_data)
+        print(f"\nPID {str(os.getpid())} {media_url}; read {len(read_urls)}; extracted {len(extracted_urls)}; to process {len(novel_news_to_process)}; processed: {n_processed}")
+    else:
+        n_processed = 0
+        n_no_body = 0
+    media_stats_manager.write_stats((media_url, 
+                                     n_processed, 
+                                     n_no_body), 
+                                     input_iso_datetime=TODAY_LOCAL_DATETIME,
+                                     pid=os.getpid()
+                                     )
+    return n_processed, n_no_body
+
+def filter_old_url(parsed_html: BeautifulSoup):
+
+    try:
+        meta_tag_published_time = parsed_html.html.head.find("meta", 
+                                                             attrs={"property": regex_published_time})
+        if meta_tag_published_time is None:
+            return STATUS_5_2
+        publ_tsm = meta_tag_published_time.attrs["content"]
+        if not publ_tsm:
+            return STATUS_5_3
+        dtime_diff = (TODAY_LOCAL_DATETIME - datetime.fromisoformat(publ_tsm)).total_seconds() / SECONDS_IN_DAY
+        if dtime_diff > N_MAX_DAYS_OLD:
+            return STATUS_5_4
+    except:
+        return STATUS_5_1
+    return STATUS_0
+
+@garbage_logger()
+def find_urls_data(news_urls: list, 
+                   media_url: str,
+                   score: float,
+                   order_keys=True
+                   ):
+    news_data = []
+    garbage_urls = []
+    n_no_articlebody_in_article = 0
+    for news_url in news_urls:
+        data, code = _extract_data_from_url(
+            news_url, 
+            media_url,
+            score,
+            order_keys
+            )
+        if not data:
+            garbage_urls.append((news_url, media_url, code))
+            if code == STATUS_5_6:
+                n_no_articlebody_in_article += 1
+            continue
+        news_data.append(data)
+
+    print("Garbage from data extraction:", len(garbage_urls))
+    if garbage_urls:
+        return (news_data, n_no_articlebody_in_article), {"has_garbage": False, "data": garbage_urls}
+    else:
+        return (news_data, n_no_articlebody_in_article), {"has_garbage": True, "data": garbage_urls}
+
+@garbage_logger()
+def find_valid_urls(input_urls: list, 
+                         media_url: str
+                         ) -> (list, bool):
+    # Open file of garbage urls to avoid
+    lock = mp.Lock()
+    with lock:
+        read_urls = pd.DataFrame(ut.read_garbage((media_url, )), 
+                                 columns=["in_store", "media_store"]
+                                 )
+    # Urls from garbage table query
+    novel_urls = read_urls.merge(pd.DataFrame({"in_extraction": input_urls, 
+                                               "media_extraction": [media_url] * len(input_urls)}) \
+                                                .drop_duplicates(), 
+                                 left_on=["in_store", "media_store"], 
+                                 right_on=["in_extraction", "media_extraction"], 
+                                 how="right")
+    # Merge extracted and loaded news in order to process the new ones
+    urls_to_process = novel_urls.loc[novel_urls[["in_store", "media_store"]].isnull().all(axis=1), "in_extraction"] 
+    #print("garbage_urls:", len(read_urls), "input urls:", len(input_urls), "urls_to_process:", len(urls_to_process))
+    new_garbage = []
+    valid_urls = []
+    #status_and_id = []
+    for url in urls_to_process.tolist():
+        # Filter out urls with query symbols
+        if url == media_url:
+            new_garbage.append((url, media_url, STATUS_3_1))
+            continue
+        if  url.endswith(".xml") \
+            or url.endswith(".pdf") \
+            or url.endswith(".lxml") \
+            or url.endswith(".jpg") \
+            or url.endswith(".png") \
+            or url.endswith(".gif"):
+            new_garbage.append((url, media_url, STATUS_3_2))
+            continue
+        if "pagina-1.html" in url \
+            or "/firmas" in url \
+            or "/humor/" in url \
+            or "/autor" in url \
+            or "/autores/" in url \
+            or "/foto/" in url \
+            or "/fotos/" in url \
+            or "/video/" in url \
+            or "/videos/" in url \
+            or "/opinión/" in url \
+            or "/opinion/" in url:
+            new_garbage.append((url, media_url, STATUS_3_3))
+            continue
+        url_splits = [x for x in url.split("/") if x][2:]
+        if len(url_splits) <= 1:
+            new_garbage.append((url, media_url, STATUS_3_4))
+            continue
+        elif len(url_splits) >= 2:
+            if regex_too_short_url_end.search(url_splits[-1]):
+                new_garbage.append((url, media_url, STATUS_3_5))
+                continue
+        if media_url[:-1] not in url:
+            new_garbage.append((url, media_url, STATUS_3_6))
+            continue
+        if regex_url_startswith_https.search(url):
+            valid_urls.append(url)
+        
+    if new_garbage:
+        return list(set(valid_urls)), {"has_garbage": False, "data": new_garbage}
+    else:
+        return list(set(valid_urls)), {"has_garbage": True, "data": new_garbage}
+
+def read_stored_news(where_params: [list, tuple]):
+    with sqlite3.connect(DB_NAME_NEWS, 
+                         timeout=DB_TIMEOUT) as conn:
+        cursor = conn.cursor()
+        if not isinstance(where_params, (tuple, list)):
+            where_params = (where_params, )
+        query_str = """
+            SELECT 
+                url
+            FROM 
+                news
+            WHERE
+                mediaUrl = ?;
+            """
+    return cursor.execute(query_str, where_params).fetchall()
+
+def insert_news(data: tuple[tuple]):
+    with sqlite3.connect(DB_NAME_NEWS, 
+                         timeout=DB_TIMEOUT) as conn:
+        cursor = conn.cursor()
+        query_str = f"""
+            INSERT INTO news
+                (
+                url,
+                mediaUrl,
+                creationDate,
+                insertDate,
+                updateDate,    
+                title,
+                description,
+                articleBody,
+                mainTopic,
+                otherTopic,
+                imageUrl,
+                country,
+                nTokens,
+                score,
+                preprocessed
+                )
+                    VALUES
+                (
+                    ?,
+                    ?,
+                    ?,
+                    DATETIME('now', 'localtime', 'utc'),
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    ?,
+                    False
+                )
+                ;
+            """
+        if not isinstance(data, tuple):
+            data = tuple(data)
+        cursor.executemany(query_str, 
+                           data)
+        conn.commit()
+# END. Search, compare, filter, validate extract and curate data
+
+# for each news-url
+def _extract_data_from_url(news_url: list, 
+                           media_url: str,
+                           score: float,
+                           order_keys: bool=True):
+    
+    response, code = _send_get_request(news_url)
+    if code != STATUS_0:
+        return {}, code
+    parsed_news_hmtl = BeautifulSoup(response.content, 
+                                     "html.parser")
+    # Accept or reject url if news date is more than N_MAX_DAYS_OLD days older
+    code = filter_old_url(parsed_news_hmtl)
+    if code != STATUS_0:
+        return {}, code
+    data = {}
+    extracted_data = _search_from_json(parsed_news_hmtl, 
+                                      news_url,
+                                      media_url
+                                      )
+    if extracted_data:
+        data.update(extracted_data)
+    extracted_data = _search_from_metadata(parsed_news_hmtl, 
+                                          data
+                                          )
+    if extracted_data:
+        data.update(extracted_data)
+    if not data.get("title", False) or not data.get("creation_datetime", False):
+        return {}, STATUS_5_5
+    if not data.get("body", False):
+        extracted_data = find_body_with_gpt(parsed_news_hmtl, 
+                                            news_url,
+                                            media_url
+                                            )
+        if not extracted_data.get("body", False):
+            return {}, STATUS_5_6
+        data.update(extracted_data)
+
+    data["country"] = parsed_news_hmtl.html.attrs.get("lang", "")
+    # TODO complete this
+    data["media_url"] = media_url
+    data["url"] = news_url
+    data["score"] = score
+
+    if order_keys:
+        return order_dict_keys(data), STATUS_0
+    return data, STATUS_0
+
+def _send_get_request(news_url: str):
+    try:
+        response = requests.get(news_url, 
+                                headers=HEADERS, 
+                                timeout=MEDIA_GET_REQ_TIMEOUT)
+    except requests.exceptions.TooManyRedirects as e1:
+        #print("An error 1 occurred; news request:", news_url, e1)
+        #file_manager.write_on_file(file_name, 
+        #                           [{"status_code": STATUS_1_1, "id": news_url}])
+        return None, STATUS_1_1
+    except requests.exceptions.RequestException as e2:
+        #print("An error 2 occurred; news request:", news_url, e2)
+        #file_manager.write_on_file(file_name, 
+        #                           [{"status_code": STATUS_1_2, "id": news_url}])
+        return None, STATUS_1_2
+    except UnicodeDecodeError as e3:
+        #print("An error 3 occurred; news request:", news_url, e3)
+        #file_manager.write_on_file(file_name, 
+        #                           [{"status_code": STATUS_1_3, "id": news_url}])
+        return None, STATUS_1_3
+    except Exception as e4:
+        #print("An error 4 occurred; news request:", news_url, e4)
+        #file_manager.write_on_file(file_name, 
+        #                           [{"status_code": STATUS_1_2, "id": news_url}])
+        return None, STATUS_1_2
+    return response, STATUS_0
+
+def _search_from_json(html: BeautifulSoup, 
+                            
                             url: str,
                             media: str,
                             only_article_body: bool=True 
@@ -254,7 +734,7 @@ def extract_data_from_jsons(html: BeautifulSoup,
         return {}
     return data_extracted
 
-def extract_data_from_metadata(parsed_html: BeautifulSoup, 
+def _search_from_metadata(parsed_html: BeautifulSoup, 
                                data_input: dict) -> tuple[dict, bool]:
     data_extacted = {}
     image_found = False
@@ -337,567 +817,13 @@ def extract_data_from_metadata(parsed_html: BeautifulSoup,
             extraction_completed = True
     return data_extacted
 
-def extract_keys_with_gpt(parsed_code: BeautifulSoup) -> dict:
-    #print("..Keys through gpt..")
-    tags_with_text = parsed_code.find_all(lambda tag: tag.name in ("p", "h1", "h2"))
-    text_clean_from_tags = "".join([re.sub("\n+", "\n", tag.get_text()) for tag in tags_with_text])
-    try:
-        openai_response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", 
-                 "content": prompt_role_summary},
-                {"role": "user", 
-                 "content": text_clean_from_tags},
-            ]
-        )
-        message_content = openai_response["choices"][0].message["content"]
-        try:
-            n_tokens = regex_n_tokens.search(message_content).groups()[0]
-        except:
-            n_tokens = -1
-        try:
-            title = regex_headline.search(message_content).groups()[0]
-        except:
-            title = ""
-        try:
-            tags = regex_topics.search(message_content).groups()[0]
-        except:
-            tags = ""
-        try:
-            creation_datetime = regex_creation_datetime.search(message_content).groups()[0]
-        except:
-            creation_datetime = ""
-        try:
-            modified_datetime = regex_update_datetime.search(message_content).groups()[0]
-        except:
-            modified_datetime = ""
-        try:
-            body = regex_only_summary.search(message_content).groups()[0]
-        except:
-            body = ""
-        data = {
-            "n_tokens": n_tokens,
-            "title": title,
-            "other_topic": tags,
-            "creation_datetime": creation_datetime,
-            "modified_datetime": modified_datetime,
-            "body": body
-            }
-        data["image_url"] = ""
-
-        return data
-    except Exception as e:
-        return {}
-    
-def remove_body_tags(text: str) -> str:
-    return re.sub("<.*?>", "", text)
-
-def find_body_with_gpt(parsed_html: BeautifulSoup, 
-                       url: str,
-                       media: str
-                       ) -> dict:
-    tags_with_text = parsed_html.find_all(lambda tag: tag.name in ("p", ))
-    text_clean_from_tags = "".join([re.sub("\n+", "\n", tag.get_text()) for tag in tags_with_text])
-    #clean_paragraphs = clean_paragraphs.split("\n")[0]
-    #parag_texts = str({i: x if x else "\n" for i, x in enumerate(clean_paragraphs)})[1:-1]
-    body, n_tokens = get_body_summary(text_clean_from_tags, 
-                                      url,
-                                      media
-                                      )
-    data = {
-        "n_tokens": n_tokens,
-        "body": body
-    }
-    return data
-
-#@error_logger(file_manager, FILE_NAME_EXTRACTION_ERRORS)
-@garbage_logger()
-def get_body_summary(text: str, 
-                     url: str,
-                     media: str
-                     ) -> tuple[str, str]:
-    if BLOCK_API_CALL:
-        #return (text, -1), {"status_code": STATUS_0, "id": ""}
-        return (text, -1), {"has_garbage": True, "data": []}
-    try:
-        openai_response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": prompt_role_summary},
-                {"role": "user", "content": text},
-            ]
-        )
-    except Exception as e:
-        #return ("", 0), {"status_code": STATUS_4, "id": url}
-        return ("", 0), {"has_garbage": False, "data": [(url, media, STATUS_4)]}
-    
-    message_content = openai_response["choices"][0].message["content"]
-    try:
-        n_tokens = regex_n_tokens.search(message_content).groups()[0]
-    except:
-        n_tokens = -1
-    try:
-        body_summary = regex_only_summary.search(message_content).groups()[0]
-    except:
-        body_summary = ""
-    if "BodyNotFound" in body_summary:
-        body_summary = text
-        n_tokens = -1
-    #return (body_summary, n_tokens), {"status_code": STATUS_0, "id": ""}
-    return (body_summary, n_tokens), {"has_garbage": True, "data": []}
-
-def treat_raw_urls(raw_urls: list, 
-                   media_url: str,
-                   score: float):
-    
-    media_stats_manager = ut.StatisticsManager(True)
-    urls = find_valid_urls(raw_urls,
-                           media_url)
-    if urls:
-        lock = mp.Lock()
-        with lock:
-            read_urls = pd.DataFrame(read_stored_news(media_url), 
-                                     columns=["in_store"])
-        extracted_urls = pd.DataFrame(urls, 
-                                      columns=["in_extraction"]
-                                      ).drop_duplicates()
-        novel_news = read_urls.merge(extracted_urls, 
-                                     left_on="in_store", 
-                                     right_on="in_extraction", 
-                                     how="right")
-        # Merge extracted and loaded news in order to process the new ones
-        novel_news_to_process = novel_news \
-            .loc[novel_news.in_store.isnull(), "in_extraction"] \
-            .tolist()
-        
-        # Process new news
-        news_data, n_no_body = find_urls_data(novel_news_to_process, 
-                                              media_url=media_url,
-                                              score=score,
-                                              order_keys=True) # ordered
-        #print("Data:", news_data)
-        if news_data:
-            lock = mp.Lock()
-            with lock:
-                insert_news(news_data)
-                print("Rows inserted:", len(news_data), "\n")
-        # Statistics
-        n_processed = len(news_data)
-        print(f"\nPID {str(os.getpid())} {media_url}; read {len(read_urls)}; extracted {len(extracted_urls)}; to process {len(novel_news_to_process)}; processed: {n_processed}")
-    else:
-        n_processed = 0
-        n_no_body = 0
-    media_stats_manager.write_stats((media_url, 
-                                     n_processed, 
-                                     n_no_body), 
-                                     input_iso_datetime=TODAY_LOCAL_DATETIME,
-                                     pid=os.getpid()
-                                     )
-    return n_processed, n_no_body
-
-#@error_logger(file_manager, FILE_NAME_EXTRACTION_ERRORS)
-@garbage_logger()
-def find_valid_urls(input_urls: list, 
-                         media_url: str
-                         ) -> (list, bool):
-    # Open file of garbage urls to avoid
-    lock = mp.Lock()
-    with lock:
-        #garbage_urls = ut.read_json_file(PATH_GARBAGE_URLS, 
-        #                                 FILE_NAME_GARBAGE_URLS).get(media_url, [])
-        read_urls = pd.DataFrame(ut.read_garbage((media_url, )), 
-                                 columns=["in_store", "media_store"]
-                                 )
-    # Urls from garbage table query
-    novel_urls = read_urls.merge(pd.DataFrame({"in_extraction": input_urls, 
-                                               "media_extraction": [media_url] * len(input_urls)}) \
-                                                .drop_duplicates(), 
-                                 left_on=["in_store", "media_store"], 
-                                 right_on=["in_extraction", "media_extraction"], 
-                                 how="right")
-    # Merge extracted and loaded news in order to process the new ones
-    urls_to_process = novel_urls.loc[novel_urls[["in_store", "media_store"]].isnull().all(axis=1), "in_extraction"] 
-    #print("garbage_urls:", len(read_urls), "input urls:", len(input_urls), "urls_to_process:", len(urls_to_process))
-    new_garbage = []
-    valid_urls = []
-    #status_and_id = []
-    for url in urls_to_process.tolist():
-        # Filter out urls with query symbols
-        if url == media_url:
-            #status_and_id.append({"status_code": STATUS_3_1, "id": url})
-            new_garbage.append((url, media_url, STATUS_3_1))
-            continue
-        if  url.endswith(".xml") \
-            or url.endswith(".pdf") \
-            or url.endswith(".lxml") \
-            or url.endswith(".jpg") \
-            or url.endswith(".png") \
-            or url.endswith(".gif"):
-            #status_and_id.append({"status_code": STATUS_3_2, "id": url})
-            new_garbage.append((url, media_url, STATUS_3_2))
-            continue
-        if "pagina-1.html" in url \
-            or "/firmas" in url \
-            or "/humor/" in url \
-            or "/autor" in url \
-            or "/autores/" in url \
-            or "/foto/" in url \
-            or "/fotos/" in url \
-            or "/video/" in url \
-            or "/videos/" in url \
-            or "/opinión/" in url \
-            or "/opinion/" in url:
-            #status_and_id.append({"status_code": STATUS_3_3, "id": url})
-            new_garbage.append((url, media_url, STATUS_3_3))
-            continue
-        url_splits = [x for x in url.split("/") if x][2:]
-        if len(url_splits) <= 1:
-            #status_and_id.append({"status_code": STATUS_3_4, "id": url})
-            new_garbage.append((url, media_url, STATUS_3_4))
-            continue
-        elif len(url_splits) >= 2:
-            if regex_too_short_url_end.search(url_splits[-1]):
-                #status_and_id.append({"status_code": STATUS_3_5, "id": url})
-                new_garbage.append((url, media_url, STATUS_3_5))
-                continue
-        if media_url[:-1] not in url:
-            #status_and_id.append({"status_code": STATUS_3_6, "id": url})
-            new_garbage.append((url, media_url, STATUS_3_6))
-            continue
-        if regex_url_startswith_https.search(url):
-            valid_urls.append(url)
-        
-    #print(f"\t{media_url}; new garbage urls {len(new_garbage)};", f"Treat {len(valid_urls)} urls\n")
-    #cache = {"status_code": status_and_id}
-    if new_garbage:
-        return list(set(valid_urls)), {"has_garbage": False, "data": new_garbage}
-    else:
-        return list(set(valid_urls)), {"has_garbage": True, "data": new_garbage}
-    
-@garbage_logger()
-def find_urls_data(news_urls: list, 
-                   media_url: str,
-                   score: float,
-                   order_keys=True
-                   ):
-    news_data = []
-    garbage_urls = []
-    n_no_articlebody_in_article = 0
-    for news_url in news_urls:
-        data, code = _extract_data_from_news(news_url, 
-                                             media_url,
-                                             score,
-                                             order_keys)
-        if not data:
-            garbage_urls.append((news_url, media_url, code))
-            if code == STATUS_5_6:
-                n_no_articlebody_in_article += 1
-            continue
-        news_data.append(data)
-
-    print("Garbage from data extraction:", len(garbage_urls))
-    if garbage_urls:
-        return (news_data, n_no_articlebody_in_article), {"has_garbage": False, "data": garbage_urls}
-    else:
-        return (news_data, n_no_articlebody_in_article), {"has_garbage": True, "data": garbage_urls}
-
-def _extract_data_from_news(news_url: list, 
-                            media_url: str,
-                            score: float,
-                            order_keys: bool=True):
-    
-    response, code = _send_get_request(news_url)
-    if code != STATUS_0:
-        return {}, code
-    parsed_news_hmtl = BeautifulSoup(response.content, 
-                                     "html.parser")
-    # Accept or reject url if news date is more than N_MAX_DAYS_OLD days older
-    code = filter_old_url(parsed_news_hmtl)
-    if code != STATUS_0:
-        return {}, code
-    data = {}
-    extracted_data = extract_data_from_jsons(parsed_news_hmtl, 
-                                             news_url,
-                                             media_url
-                                             )
-    if extracted_data:
-        data.update(extracted_data)
-    extracted_data = extract_data_from_metadata(parsed_news_hmtl, 
-                                                data
-                                                )
-    if extracted_data:
-        data.update(extracted_data)
-    if not data.get("title", False) or not data.get("creation_datetime", False):
-        return {}, STATUS_5_5
-    if not data.get("body", False):
-        extracted_data = find_body_with_gpt(parsed_news_hmtl, 
-                                            news_url,
-                                            media_url
-                                            )
-        if not extracted_data.get("body", False):
-            return {}, STATUS_5_6
-        data.update(extracted_data)
-
-    data["country"] = parsed_news_hmtl.html.attrs.get("lang", "")
-    # TODO complete this
-    data["media_url"] = media_url
-    data["url"] = news_url
-    data["score"] = score
-
-    if order_keys:
-        return order_dict_keys(data), STATUS_0
-    return data, STATUS_0
-
-def _send_get_request(news_url: str):
-    try:
-        response = requests.get(news_url, 
-                                headers=HEADERS, 
-                                timeout=MEDIA_GET_REQ_TIMEOUT)
-    except requests.exceptions.TooManyRedirects as e1:
-        #print("An error 1 occurred; news request:", news_url, e1)
-        #file_manager.write_on_file(file_name, 
-        #                           [{"status_code": STATUS_1_1, "id": news_url}])
-        return None, STATUS_1_1
-    except requests.exceptions.RequestException as e2:
-        #print("An error 2 occurred; news request:", news_url, e2)
-        #file_manager.write_on_file(file_name, 
-        #                           [{"status_code": STATUS_1_2, "id": news_url}])
-        return None, STATUS_1_2
-    except UnicodeDecodeError as e3:
-        #print("An error 3 occurred; news request:", news_url, e3)
-        #file_manager.write_on_file(file_name, 
-        #                           [{"status_code": STATUS_1_3, "id": news_url}])
-        return None, STATUS_1_3
-    except Exception as e4:
-        #print("An error 4 occurred; news request:", news_url, e4)
-        #file_manager.write_on_file(file_name, 
-        #                           [{"status_code": STATUS_1_2, "id": news_url}])
-        return None, STATUS_1_2
-    return response, STATUS_0
-
-def filter_old_url(parsed_html):
-
-    try:
-        meta_tag_published_time = parsed_html.html.head.find("meta", 
-                                                             attrs={"property": regex_published_time})
-        if meta_tag_published_time is None:
-            return STATUS_5_2
-        publ_tsm = meta_tag_published_time.attrs["content"]
-        if not publ_tsm:
-            return STATUS_5_3
-        dtime_diff = (TODAY_LOCAL_DATETIME - datetime.fromisoformat(publ_tsm)).total_seconds() / SECONDS_IN_DAY
-        if dtime_diff > N_MAX_DAYS_OLD:
-            return STATUS_5_4
-    except:
-        return STATUS_5_1
-    return STATUS_0
-
 def order_dict_keys(keys_values: dict, 
                     only_values: bool=True):
     if only_values:
         return tuple([keys_values.get(target_k, "") for target_k in ORDER_KEYS])
     else:
         return {target_k: keys_values.get(target_k, "")  for target_k in ORDER_KEYS}
-    
-def read_stored_news(where_params):
-    with sqlite3.connect(DB_NAME_NEWS, 
-                         timeout=DB_TIMEOUT) as conn:
-        cursor = conn.cursor()
-        #create_news_table(conn, 
-        #                cursor)
-        if not isinstance(where_params, (tuple, list)):
-            where_params = (where_params, )
-        query_str = """
-            SELECT 
-                url
-            FROM 
-                news
-            WHERE
-                mediaUrl = ?;
-            """
-    return cursor.execute(query_str, where_params).fetchall()
-
-def create_news_table(conn, 
-                      cursor):
-    query_str = """
-        CREATE TABLE IF NOT EXISTS news (
-            title TEXT NOT NULL,
-            description TEXT NOT NULL,
-            articleBody TEXT NOT NULL,
-            mediaUrl TEXT,
-            country TEXT,
-            creationDate TEXT NOT NULL,
-            updateDate TEXT,
-            url TEXT PRIMARY KEY NOT NULL,
-            imageUrl TEXT,
-            mainTopic TEXT,
-            otherTopic TEXT,
-            insertDate Text NOT NULL,
-            nTokens Integer
-            )
-            ;
-        """
-    cursor.execute(query_str)
-    conn.commit()
-
-def insert_news(data: tuple[tuple]):
-    with sqlite3.connect(DB_NAME_NEWS, 
-                         timeout=DB_TIMEOUT) as conn:
-        cursor = conn.cursor()
-        query_str = f"""
-            INSERT INTO news
-                (
-                url,
-                mediaUrl,
-                creationDate,
-                insertDate,
-                updateDate,    
-                title,
-                description,
-                articleBody,
-                mainTopic,
-                otherTopic,
-                imageUrl,
-                country,
-                nTokens,
-                score,
-                preprocessed
-                )
-                    VALUES
-                (
-                    ?,
-                    ?,
-                    ?,
-                    DATETIME('now', 'localtime', 'utc'),
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    ?,
-                    False
-                )
-                ;
-            """
-        if not isinstance(data, tuple):
-            data = tuple(data)
-        cursor.executemany(query_str, 
-                           data)
-        conn.commit()
-
-def run_multi_process(file_path: str, 
-                      num_processes: int, 
-                      process_function):
-    
-    with open(file_path, "r") as file:
-        data = json.load(file)
-
-    with mp.Manager() as manager:
-        sections_data = manager.dict(data)
-        # Create a process for each chunk and run in parallel
-        processes = []
-        for _ in range(num_processes):
-            process = mp.Process(target=process_function, 
-                                 args=(sections_data, )
-                                 )
-            processes.append(process)
-            process.start()
-        # Wait for all processes to finish
-        for process in processes:
-            process.join()
-
-def main_multi_threading_process(queued_media_data: dict):
-    pid = str(os.getpid())
-    file_manager.add_files([
-        pid + "_" + FILE_NAME_EXTRACTION_ERRORS
-        ])
-    # 1 Initialize reboot if needed
-    media_checkpoint = ut.read_news_checkpoint(pid, 
-                                               "w+")
-    if not media_checkpoint:
-        checkpoint_started = False
-    else:
-        checkpoint_started = True
-    # 1 End
-    media_stats_manager = ut.StatisticsManager().restart_time()
-    media_news_urls = []
-    n_processed = 0
-    n_no_body = 0
-    while len(queued_media_data) > 0:
-        # The Dict-proxy can safely remove items, as the multiprocessing.Manager()  
-        # takes care of the necessary internal locking mechanisms to ensure 
-        # safe concurrent access.
-        media_url, sections_and_scores = queued_media_data.popitem()
-        for i, (section_url, score) in enumerate(sections_and_scores["data"]):
-            score = float(score)
-            section_url = section_url.strip()
-            if not media_url.startswith("https://"):
-                media_url = "https://" + media_url
-            if checkpoint_started:
-                if media_url == media_checkpoint:
-                    checkpoint_started = False
-                else:
-                    continue
-            try:
-                response = requests.get(section_url, 
-                                        headers=HEADERS, 
-                                        timeout=NEWS_ARTICLE_GET_REQ_TIMEOUT)
-            except requests.exceptions.Timeout:
-                # Handle the timeout exception
-                print("The request timed out.")
-                ErrorReporter(f"Get request timeout exception at {section_url}")
-                continue
-            except requests.exceptions.RequestException as e:
-                # Handle other request exceptions
-                print(f"An error occurred: {str(e)}")
-                print("Retrying request without 'www'")
-                section_url = section_url.replace("www.", "")
-                response = requests.get(section_url, 
-                                        headers=HEADERS, 
-                                        timeout=NEWS_ARTICLE_GET_REQ_TIMEOUT)
-                #ErrorReporter(f"Get request general exception, {e}, at {section_url}")
-                media_url = media_url.replace("www.", "")
-                print("Request success without 'www'")
-            
-            parsed_hmtl = BeautifulSoup(response.content, 
-                                        "html.parser")
-            tags_with_url = parsed_hmtl.html.body \
-                                       .find_all("a", 
-                                                 href=re.compile(r"^(?:https:\/\/)?|^\/{1}[^\/].*|^www[.].*"))
-                                                # href=re.compile("https?:.*"))
-            raw_urls = [x.attrs["href"] for x in tags_with_url if x.attrs.get("href", False)]
-            for raw_url in raw_urls:
-                if regex_url_has_query.search(raw_url):
-                    search_spec_char = regex_url_has_query.search(raw_url)
-                    query_start_pos = search_spec_char.span()[0]
-                    raw_url = raw_url[:query_start_pos]
-                if raw_url.startswith("//"):
-                    raw_url = "https:" + raw_url
-                elif raw_url.startswith("/"):
-                    raw_url = media_url[:-1] + raw_url
-                elif raw_url.startswith("www.") or not raw_url.startswith("https://"):
-                    raw_url = "https://" + raw_url
-                media_news_urls.append(raw_url)
-        n1, n2 = treat_raw_urls(list(set(media_news_urls)), 
-                                     media_url,
-                                     score
-                                     )
-        n_processed += n1
-        n_no_body += n2
-        if not checkpoint_started and (i % N_SAVE_CHECKPOINT == 0):
-            ut.save_checkpoint(pid, 
-                               media_url)
-    media_stats_manager.write_stats(("Process summary", 
-                                    n_processed, 
-                                    n_no_body), 
-                                    input_iso_datetime=TODAY_LOCAL_DATETIME,
-                                    pid="summary"
-                                    )
+# END. for each news-ur
 
 if __name__ == "__main__":
     print(f"\n...Datetime of process: {CURRENT_DATE} {CURRENT_TIME}...\n")

@@ -5,9 +5,10 @@ import sqlite3
 from bs4 import BeautifulSoup
 import json
 import os
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 import time
 import multiprocessing
+import re
 from constants import (
     PATH_ERRORS, 
     DB_NAME_NEWS, 
@@ -284,3 +285,6 @@ class FileManager():
     def close_all_files(self):
         for file in self.files_map.values():
             file.close()
+
+def remove_body_tags(text: str) -> str:
+    return re.sub("<.*?>", "", text)
