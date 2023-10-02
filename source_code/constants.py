@@ -39,6 +39,7 @@ PATH_DATA = "../data"
 PATH_STATS = os.path.join(PATH_DATA, "statistics")
 PATH_ERRORS = os.path.join(PATH_DATA, "errors")
 PATH_GARBAGE_URLS = os.path.join(PATH_DATA, "garbage_urls")
+PATH_SECTIONS_FILE = os.path.join(PATH_DATA, "final_url_sections_v*.json")
 FILE_NAME_GARBAGE_URLS = "garbage_urls.json"
 FILE_PATH_EXTRACTION_ERRORS = os.path.join(PATH_DATA, FILE_NAME_EXTRACTION_ERRORS)
 #FILE_PATH_PROMPT_ROLE_KEYS = os.path.join(PATH_DATA, "role_prompt_keys.txt")

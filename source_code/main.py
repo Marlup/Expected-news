@@ -1,16 +1,15 @@
-from datetime import datetime, timedelta, timezone
-import requests
-import openai
 from bs4 import BeautifulSoup
-import re
-import pandas as pd
-import sqlite3
-import json
-import glob
-import multiprocessing as mp
-import os
-import utilities as ut
+from datetime import datetime, timedelta, timezone
 from constants import *
+import multiprocessing as mp
+import pandas as pd
+import utilities as ut
+import requests
+import sqlite3
+import re
+import openai
+import json
+import os
 
 # Classes
 class ErrorReporter(Exception):
@@ -19,12 +18,6 @@ class ErrorReporter(Exception):
         super().__init__(message)
         with open("Errors log.txt", "w") as errors_file:
             errors_file.write(message)
-# Database names
-# Managers instantiation
-file_manager = ut.FileManager()
-#file_manager.add_files([
-#    FILE_NAME_EXTRACTION_ERRORS
-#    ])
 # Dates and times
 TODAY_LOCAL_DATETIME = datetime.now().replace(tzinfo=timezone.utc)
 CURRENT_DATE, CURRENT_TIME = str(datetime.today()).split(" ")
@@ -49,31 +42,6 @@ regex_only_summary = re.compile("Body Summary:(.*)", flags=re.DOTALL)
 regex_published_time = re.compile(r"publish(?:ed)?_?(?:time|date)")
 
 ## Decorators
-# Decorator function to handle inputs and error logging
-def error_logger(manager: ut.FileManager,
-                 file_name: str
-                 ):
-    def decorator(target_func):
-        def wrapper(*args, **kwargs):
-            data, cache = target_func(*args, **kwargs)
-            # If list of several status_codes'
-            status_code_value = cache.get("status_code", "0")
-            if isinstance(status_code_value, (list, tuple)) and status_code_value:
-                file_name = str(os.getpid()) + "_" + file_name
-                manager.write_on_file(file_name,
-                                      status_code_value
-                                      )
-                return data
-            # If dict of 1 status_code
-            if isinstance(status_code_value, dict) and status_code_value != "0":
-                file_name = str(os.getpid()) + "_" + file_name
-                manager.write_on_file(file_name,
-                                      [cache]
-                                      )
-            return data
-        return wrapper
-    return decorator
-
 def garbage_logger():
     def decorator(target_func):
         def wrapper(*args, **kwargs):
@@ -124,7 +92,7 @@ def extract_data_from_jsons(html: BeautifulSoup,
                 json_data = json_data[0]
         for k, json_values in json_data.items():
             if not body_found and "articleBody" in k:
-                body, n_tokens = get_body_summary(remove_body_tags(json_data["articleBody"]), 
+                body, n_tokens = get_body_summary(ut.remove_body_tags(json_data["articleBody"]), 
                                                   url,
                                                   media
                                                   )
@@ -333,9 +301,6 @@ def extract_keys_with_gpt(parsed_code: BeautifulSoup) -> dict:
         return data
     except Exception as e:
         return {}
-    
-def remove_body_tags(text: str) -> str:
-    return re.sub("<.*?>", "", text)
 
 def find_body_with_gpt(parsed_html: BeautifulSoup, 
                        url: str,
@@ -355,7 +320,6 @@ def find_body_with_gpt(parsed_html: BeautifulSoup,
     }
     return data
 
-#@error_logger(file_manager, FILE_NAME_EXTRACTION_ERRORS)
 @garbage_logger()
 def get_body_summary(text: str, 
                      url: str,
@@ -440,7 +404,6 @@ def treat_raw_urls(raw_urls: list,
                                      )
     return n_processed, n_no_body
 
-#@error_logger(file_manager, FILE_NAME_EXTRACTION_ERRORS)
 @garbage_logger()
 def find_valid_urls(input_urls: list, 
                          media_url: str
@@ -448,8 +411,6 @@ def find_valid_urls(input_urls: list,
     # Open file of garbage urls to avoid
     lock = mp.Lock()
     with lock:
-        #garbage_urls = ut.read_json_file(PATH_GARBAGE_URLS, 
-        #                                 FILE_NAME_GARBAGE_URLS).get(media_url, [])
         read_urls = pd.DataFrame(ut.read_garbage((media_url, )), 
                                  columns=["in_store", "media_store"]
                                  )
@@ -599,24 +560,12 @@ def _send_get_request(news_url: str):
                                 headers=HEADERS, 
                                 timeout=MEDIA_GET_REQ_TIMEOUT)
     except requests.exceptions.TooManyRedirects as e1:
-        #print("An error 1 occurred; news request:", news_url, e1)
-        #file_manager.write_on_file(file_name, 
-        #                           [{"status_code": STATUS_1_1, "id": news_url}])
         return None, STATUS_1_1
     except requests.exceptions.RequestException as e2:
-        #print("An error 2 occurred; news request:", news_url, e2)
-        #file_manager.write_on_file(file_name, 
-        #                           [{"status_code": STATUS_1_2, "id": news_url}])
         return None, STATUS_1_2
     except UnicodeDecodeError as e3:
-        #print("An error 3 occurred; news request:", news_url, e3)
-        #file_manager.write_on_file(file_name, 
-        #                           [{"status_code": STATUS_1_3, "id": news_url}])
         return None, STATUS_1_3
     except Exception as e4:
-        #print("An error 4 occurred; news request:", news_url, e4)
-        #file_manager.write_on_file(file_name, 
-        #                           [{"status_code": STATUS_1_2, "id": news_url}])
         return None, STATUS_1_2
     return response, STATUS_0
 
@@ -756,18 +705,6 @@ def run_multi_process(file_path: str,
             process.join()
 
 def main_multi_threading_process(queued_media_data: dict):
-    pid = str(os.getpid())
-    file_manager.add_files([
-        pid + "_" + FILE_NAME_EXTRACTION_ERRORS
-        ])
-    # 1 Initialize reboot if needed
-    media_checkpoint = ut.read_news_checkpoint(pid, 
-                                               "w+")
-    if not media_checkpoint:
-        checkpoint_started = False
-    else:
-        checkpoint_started = True
-    # 1 End
     media_stats_manager = ut.StatisticsManager().restart_time()
     media_news_urls = []
     n_processed = 0
@@ -782,11 +719,6 @@ def main_multi_threading_process(queued_media_data: dict):
             section_url = section_url.strip()
             if not media_url.startswith("https://"):
                 media_url = "https://" + media_url
-            if checkpoint_started:
-                if media_url == media_checkpoint:
-                    checkpoint_started = False
-                else:
-                    continue
             try:
                 response = requests.get(section_url, 
                                         headers=HEADERS, 
@@ -837,9 +769,6 @@ def main_multi_threading_process(queued_media_data: dict):
                                      )
         n_processed += n1
         n_no_body += n2
-        #if not checkpoint_started and (i % N_SAVE_CHECKPOINT == 0):
-        #    ut.save_checkpoint(pid, 
-        #                       media_url)
     media_stats_manager.write_stats(("Process summary", 
                                     n_processed, 
                                     n_no_body), 
@@ -849,19 +778,14 @@ def main_multi_threading_process(queued_media_data: dict):
 
 if __name__ == "__main__":
     print(f"\n...Datetime of process: {CURRENT_DATE} {CURRENT_TIME}...\n")
-    #if FULL_START:
-    #    for i in range(NUM_CORES):
-    #        ut.save_checkpoint(str(i), "")
 
     # Extract the last version
-    version_n = max(int(x.split("_")[-1][1:-5]) for x in glob.glob("../data/final_url_sections_v*.json"))
-    sections_file_path = f"final_url_sections_v{version_n}.json"
-    file_path = os.path.join(PATH_DATA, sections_file_path)
-
-    run_multi_process(file_path, 
-                      NUM_CORES, 
-                      main_multi_threading_process)
-    file_manager.close_all_files()
-    for f in glob.glob(os.path.join(PATH_DATA, "checkpoint_*.json")):
-        os.remove(os.path.join(PATH_DATA, f))
+    num_last_version = ut.get_last_sections_file_num(PATH_SECTIONS_FILE)
+    run_multi_process(
+        os.path.join(PATH_DATA, 
+                     f"final_url_sections_v{num_last_version}.json"), 
+        NUM_CORES, 
+        main_multi_threading_process)
+    #for f in glob.glob(os.path.join(PATH_DATA, "checkpoint_*.json")):
+    #    os.remove(os.path.join(PATH_DATA, f))
     print("\n...The process ended...")
