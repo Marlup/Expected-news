@@ -1,0 +1,12 @@
+json
+os
+datetime
+requests
+openai
+bs4
+re
+pandas
+sqlite3
+glob
+multiprocessing
+django

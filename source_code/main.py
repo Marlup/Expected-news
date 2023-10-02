@@ -28,31 +28,10 @@ file_manager = ut.FileManager()
 # Dates and times
 TODAY_LOCAL_DATETIME = datetime.now().replace(tzinfo=timezone.utc)
 CURRENT_DATE, CURRENT_TIME = str(datetime.today()).split(" ")
-# Data structures
-ORDER_KEYS = ("url",
-              "media_url",
-              "creation_datetime",
-              "update_datetime",
-              "title",
-              "description",
-              "body", 
-              "main_topic",
-              "other_topic",
-              "image_url",
-              "country",
-              "n_tokens",
-              "score"
-              )
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
-}
-## Dynamical global variables
 if not BLOCK_API_CALL:
     openai.api_key = os.getenv("OPENAI_API_KEY")
-#with open(FILE_NAME_PROMPT_ROLE_KEYS, "r") as file:
-#    prompt_role = file.read()
 with open(FILE_PATH_PROMPT_ROLE_SUMMARY, "r") as file:
-    prompt_role_summary = file.read()
+    PROMPT_ROLE_SUMMARY = file.read()
 regex_url_has_query = re.compile("[?!)(=&+%@#]{1}")
 regex_too_short_url_end = re.compile(r"^[.a-zA-Z0-9]+(-[.a-zA-Z0-9]+){,2}$")
 regex_url_startswith_https = re.compile("https?:[\/]{2}")
@@ -68,12 +47,6 @@ regex_creation_datetime = re.compile("Creation DateTime: (.*).*", flags=re.DOTAL
 regex_update_datetime = re.compile("Update DateTime: (.*).*Body Summary", flags=re.DOTALL)
 regex_only_summary = re.compile("Body Summary:(.*)", flags=re.DOTALL)
 regex_published_time = re.compile(r"publish(?:ed)?_?(?:time|date)")
-node_ignore = ["europa", 
-               "africa",
-               "asia",
-               "oceania",
-               "prensadigital"
-              ]
 
 ## Decorators
 # Decorator function to handle inputs and error logging
@@ -115,31 +88,6 @@ def garbage_logger():
     return decorator
 
 ## Functions
-def find_body_from_json(html: BeautifulSoup, 
-                        data: dict, 
-                        url: str,
-                        media: str
-                        ) -> dict:
-    data["body"] = ""
-    data["n_tokens"] = 0
-    jsons = html.find_all("script", 
-                          attrs={"type": re.compile("application[/]{1}ld[+]{1}json")})
-    for json_data_str in jsons:
-        json_data = json.loads(json_data_str.get_text(), strict=False)
-        if isinstance(json_data, list):
-            if json_data:
-                json_data = json_data[0]
-            else:
-                continue
-        if "articleBody" in json_data:
-            body, n_tokens = get_body_summary(remove_body_tags(json_data["articleBody"]), 
-                                              url,
-                                              media
-                                              )
-            data["body"] = body
-            data["n_tokens"] = n_tokens
-            break
-    return data
 
 def extract_data_from_jsons(html: BeautifulSoup, 
                             url: str,
@@ -342,7 +290,7 @@ def extract_keys_with_gpt(parsed_code: BeautifulSoup) -> dict:
             model="gpt-3.5-turbo",
             messages=[
                 {"role": "system", 
-                 "content": prompt_role_summary},
+                 "content": PROMPT_ROLE_SUMMARY},
                 {"role": "user", 
                  "content": text_clean_from_tags},
             ]
@@ -420,7 +368,7 @@ def get_body_summary(text: str,
         openai_response = openai.ChatCompletion.create(
             model="gpt-3.5-turbo",
             messages=[
-                {"role": "system", "content": prompt_role_summary},
+                {"role": "system", "content": PROMPT_ROLE_SUMMARY},
                 {"role": "user", "content": text},
             ]
         )
@@ -471,7 +419,7 @@ def treat_raw_urls(raw_urls: list,
         news_data, n_no_body = find_urls_data(novel_news_to_process, 
                                               media_url=media_url,
                                               score=score,
-                                              order_keys=True) # ordered
+                                              order_keys=True) # keys are ordered
         #print("Data:", news_data)
         if news_data:
             lock = mp.Lock()
@@ -853,9 +801,13 @@ def main_multi_threading_process(queued_media_data: dict):
                 print(f"An error occurred: {str(e)}")
                 print("Retrying request without 'www'")
                 section_url = section_url.replace("www.", "")
-                response = requests.get(section_url, 
-                                        headers=HEADERS, 
-                                        timeout=NEWS_ARTICLE_GET_REQ_TIMEOUT)
+                try:
+                    response = requests.get(section_url, 
+                                            headers=HEADERS, 
+                                            timeout=NEWS_ARTICLE_GET_REQ_TIMEOUT)
+                except Exception as e:
+                    print(f"Unexpected exception at second request attempt to url {section_url}:\n{e}")
+                    continue
                 #ErrorReporter(f"Get request general exception, {e}, at {section_url}")
                 media_url = media_url.replace("www.", "")
                 print("Request success without 'www'")

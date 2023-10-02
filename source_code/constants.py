@@ -31,15 +31,17 @@ STATUS_5_4 = "5_4"
 STATUS_5_5 = "5_5"
 STATUS_5_6 = "5_6"
 # File and path names
-DB_NAME_NEWS = "../../db.sqlite3"
+DB_NAME_NEWS = "../db.sqlite3"
 FILE_NAME_EXTRACTION_ERRORS = "extraction_errors.txt"
+DIGITAL_MEDIAS_URL = "https://www.prensaescrita.com/prensadigital.php"
+DIGITAL_MEDIAS_MAIN_ROOT = "https://www.prensaescrita.com"
 PATH_DATA = "../data"
 PATH_STATS = os.path.join(PATH_DATA, "statistics")
 PATH_ERRORS = os.path.join(PATH_DATA, "errors")
 PATH_GARBAGE_URLS = os.path.join(PATH_DATA, "garbage_urls")
 FILE_NAME_GARBAGE_URLS = "garbage_urls.json"
 FILE_PATH_EXTRACTION_ERRORS = os.path.join(PATH_DATA, FILE_NAME_EXTRACTION_ERRORS)
-FILE_PATH_PROMPT_ROLE_KEYS = os.path.join(PATH_DATA, "role_prompt_keys.txt")
+#FILE_PATH_PROMPT_ROLE_KEYS = os.path.join(PATH_DATA, "role_prompt_keys.txt")
 FILE_PATH_PROMPT_ROLE_SUMMARY = os.path.join(PATH_DATA, "role_prompt_body.txt")
 # Data structures
 ORDER_KEYS = ("url",
