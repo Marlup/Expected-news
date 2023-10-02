@@ -1,9 +1,8 @@
 /testing/data/statistics/webscraping/processes_*/*
 /testing/data/errors*/*
-manage.py
-/env/
 /testing/*/obsolete/
 db.sqlite3
 */__pycache__/
 */.ipynb_*/
 */obsolete/
+*/extraction-errors.txt
