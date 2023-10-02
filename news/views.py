@@ -1,8 +1,7 @@
-from django.shortcuts import render#, get_object_or_404
+from django.shortcuts import render
 from .models import News
 from .server_variables import *
 from django.http import JsonResponse
-#from django.core.paginator import Paginator, PageNotAnInteger, EmptyPage
 
 # Auxiliar queries
 def _base_query():
@@ -22,8 +21,7 @@ def _end_query(query,
                ):
      # "-column", means "order by column descending order"
      rows = query.filter(preprocessed=True) \
-                 .order_by("-creationDate", 
-                           "-score") \
+                 .order_by("-creationDate", "-score") \
                  .all()[offset:offset + n_rows]
      return rows
 
@@ -32,9 +30,7 @@ def _view_feed(request,
                path,
                query):
         data_context = {"rows": _end_query(query)}
-        return render(request, 
-                      path, 
-                      data_context)
+        return render(request, path, data_context)
 
 ## Views ##
 # Main feed view
@@ -57,9 +53,7 @@ def get_more_news(request,
                   ):
         #offset = int(request.GET.get("offset", 0))
     query = _base_query()
-    rows = _end_query(query, 
-                      offset)
-    print(rows, offset)
+    rows = _end_query(query, offset)
     return JsonResponse({"rows": list(rows)})
 def get_more_news_by_topic(request,
                            topic,
@@ -67,9 +61,5 @@ def get_more_news_by_topic(request,
                            ):
     #offset = int(request.GET.get("offset", 0))
     query = _base_query().filter(mainTopic__icontains=topic)
-    rows = _end_query(query, 
-                      offset)
-    #print(type(rows), type(list(rows)), offset)
-    return JsonResponse({"rows": list(rows)}, 
-                        content_type="application/json"
-                        )
+    rows = _end_query(query, offset)
+    return JsonResponse({"rows": list(rows)}, content_type="application/json")
