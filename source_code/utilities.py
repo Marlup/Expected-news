@@ -10,19 +10,15 @@ import time
 import multiprocessing
 import re
 from constants import (
+    HEADERS,
+    PATH_DATA,
     PATH_ERRORS, 
     DB_NAME_NEWS, 
     DB_TIMEOUT, 
-    PATH_STATS
+    PATH_STATS,
+    DIGITAL_MEDIAS_URL,
+    DIGITAL_MEDIAS_MAIN_ROOT,
 )
-
-PATH_DATA = "../data"
-DIGITAL_MEDIAS_URL = "https://www.prensaescrita.com/prensadigital.php"
-DIGITAL_MEDIAS_MAIN_ROOT = "https://www.prensaescrita.com"
-DIGITAL_MEDIAS_URL = "https://www.prensaescrita.com/prensadigital.php"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
-}
 
 def update_date(current_date, current_time):
     new_date, new_time = str(datetime.today()).split(" ")
