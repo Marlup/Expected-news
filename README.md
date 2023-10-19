@@ -1,7 +1,8 @@
 # Web Scraping for News Data Extraction
 
-1. [Running the Script](#running-the-script)
-2. [Functions](#functions)
+1. [Overview](#overview)
+2. [Running the Script](#running-the-script)
+3. [Functions](#functions)
    - [extract_data_from_jsons](#extract_data_from_jsons)
    - [extract_data_from_metadata](#extract_data_from_metadata)
    - [extract_keys_with_gpt](#extract_keys_with_gpt)
@@ -16,6 +17,8 @@
    - [order_dict_keys](#order_dict_keys)
    - [read_stored_news and create_news_table](#read_stored_news-and-create_news_table)
    - [insert_news](#insert_news)
+
+# Overview
 
 This Python application is designed to extract news data from pre-extracted news media section URLs stored in file **final_url_sections_vX.json** (where, X is an integer for the file version), filter and clean the data, optionally summarize the article bodies using the OpenAI API for gpt model, and stores the information in a structured database. The script is organized into several functions, each serving a specific purpose in the data extraction process.
 
