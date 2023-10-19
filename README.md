@@ -25,7 +25,7 @@ This script can be a valuable tool for collecting and analyzing news data from v
 
 ## Running the Script
 
-In order to execute the main process and being able to see the news extracted in a webpage hosted in a local server, refer to the file helper file **run-project-end-to-end.txt** .
+In order to execute the main process and being able to see the news extracted in a webpage locally hosted and backed with *django*, refer to the helper file **run-project-end-to-end.txt** .
 
 The script can be run to extract news data from various media sources. It processes a list of media URLs and their associated sections, extracting news URLs, and storing the data in a structured database. 
 
