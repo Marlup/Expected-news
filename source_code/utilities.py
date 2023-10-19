@@ -8,7 +8,7 @@ import time
 import multiprocessing
 import re
 import glob
-from constants import (
+from process_variables import (
     HEADERS,
     PATH_DATA,
     DB_NAME_NEWS, 
@@ -16,7 +16,48 @@ from constants import (
     PATH_STATS,
     DIGITAL_MEDIAS_URL,
     DIGITAL_MEDIAS_MAIN_ROOT,
+    SYMBOLS
 )
+
+def find_invalid_files(url: str) -> bool:
+    if url.endswith(".xml") \
+    or url.endswith(".pdf") \
+    or url.endswith(".lxml") \
+    or url.endswith(".jpg") \
+    or url.endswith(".png") \
+    or url.endswith(".gif"):
+        return True
+    return False
+
+def find_invalid_sections(url: str) -> bool:
+    if "pagina-1.html" in url \
+    or "/firmas" in url \
+    or "/humor/" in url \
+    or "/autor" in url \
+    or "/autores/" in url \
+    or "/foto/" in url \
+    or "/fotos/" in url \
+    or "/video/" in url \
+    or "/videos/" in url \
+    or "/opinión/" in url \
+    or "/opinion/" in url:
+        return True
+    return False
+
+def clean_topics(raw_topics):
+    if isinstance(raw_topics, (tuple, list)):
+        topics = ",".join(raw_topics).replace(" ", "-").lower()
+    elif isinstance(raw_topics, str):
+        if ", " in raw_topics:
+            topics = raw_topics.replace(", ", ",").replace(" ", "-").lower()
+        else:
+           topics = raw_topics.lower()
+
+    for s in SYMBOLS:
+        if s in topics:
+            topics = topics.replace(s, "")
+
+    return topics
 
 def update_date(current_date, current_time):
     new_date, new_time = str(datetime.today()).split(" ")

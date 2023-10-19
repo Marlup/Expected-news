@@ -1,6 +1,6 @@
 import sqlite3
 import pandas as pd
-from constants import (
+from process_variables import (
     DB_NAME_NEWS, 
 )
 
