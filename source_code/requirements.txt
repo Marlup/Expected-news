@@ -1,0 +1,6 @@
+tensorflow
+keras
+gradio
+tensorflow_addons
+tensorflow-io
+transformers
