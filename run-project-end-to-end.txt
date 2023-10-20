@@ -1,31 +1,30 @@
 1. Install library requirements from 'requirements.txt' file
 
 2.1. Open a terminal and change current directory to root/project directory 
-     (directory name will be 'GPTNews' if cloned directly from
-     github repository).
+     (the directory name will be 'GPTNews' if cloned directly from github 
+     repository).
 
 2.2. To create the databases (django models), run these next two commands in 
      the terminal from the root directory:
      
-      python manage.py makemigrations
+     	python manage.py makemigrations
 	
-	   python manage.py migrate
+     	python manage.py migrate
 
-3. You are ready to run 'main.py' file from 'source_code' directory
+3. You are ready to run 'main.py' file, which located in 'source_code' directory.
+   Wait ~ 10 - 20 minutes until the process ends. If you run 'main.py' again, it 
+   will take less time (~ 1 min).
 
-4. Wait ~ 10 - 20 minutes until the process ends. If you re-run 'main.py', it 
-   will take less time (~ 1 min)
-
-5. News are loaded in the database, but you have to validate them: open the notebook
+5. The News are loaded in the database, but you have to validate them: open the notebook
    'preprocess_news_test.ipynb' and run all (you can also press 'run-all' button).
    Now the database has news that are ready to be queried by the server, i.e. they can
    be shown on the webpage.
 
-6. Once the previous process finished, you are up to run the server. If django was 
-   installed, run this command in the terminal:
+6. Once the previous process finishes, you are up to run the server. If django was 
+   installed already, run this command in the terminal:
 
-	python manage.py runserver
+   	python manage.py runserver
 
 7. Now that the server is running, the webpage can be accessed from your favourite browser in:
 	
-	https://localhost:8000
+   	https://localhost:8000
