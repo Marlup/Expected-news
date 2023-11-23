@@ -1,7 +1,6 @@
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from process_variables import *
-from recursion_destructuring import direct_recursive_destructure
 import multiprocessing as mp
 import pandas as pd
 import utilities as ut
@@ -117,7 +116,7 @@ def extract_data_from_jsons(html: BeautifulSoup,
         except Exception as e:
             continue
         for sub_json_data in json_data:
-            _, destructured_keys_and_values, _, _ = direct_recursive_destructure(sub_json_data)
+            _, destructured_keys_and_values, _, _ = utils.direct_recursive_destructure(sub_json_data)
             for (key, value) in destructured_keys_and_values:
                 if not type_found and ("@type" in key or "type" in key):
                     type_value = value.lower()

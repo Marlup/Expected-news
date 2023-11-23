@@ -19,6 +19,57 @@ from process_variables import (
     SYMBOLS
 )
 
+def direct_recursive_destructure(data: dict, 
+                                 n_nestings: int=0,
+                                 on_key_trail: bool=True,
+                                 sep: str="-"
+                                 ):
+    """
+    Recursively de-structure a JSON object and collect key-related information.
+
+    Args:
+        data (dict): The input JSON object to be de-structured.
+        n_nestings (int): The number of nestings in the JSON structure.
+        on_key_trail (bool): Whether to include key trails.
+        sep (str): The separator used in key trails.
+
+    Returns:
+        tuple: A tuple containing the de-structured information, including keys, values, key trails, and nesting level.
+    """
+    if on_key_trail:
+        trailed_keys = []
+    keys_with_their_values = []
+    only_keys = []
+    nesting_found = False
+    for key, value in data.items():
+        # Only for nested dict-objects
+        if isinstance(value, dict):
+            if not nesting_found:
+                n_nestings += 1
+                nesting_found = True
+            returned_only_keys, returned_keys_with_their_values, returned_trailed_keys, returned_n_nestings = direct_recursive_destructure(value,
+                                                                                                                                         n_nestings)
+            only_keys.append(key)
+            keys_with_their_values.extend(returned_keys_with_their_values)
+            if on_key_trail:
+                temp = []
+                for subkey in returned_trailed_keys:
+                    if not isinstance(subkey, tuple):
+                        temp.append(f"{key}{sep}{subkey}")
+                    else:
+                        sub1, sub2 = subkey
+                        temp.append(f"{key}{sep}{sub1}{sep}{sub2}")
+                trailed_keys.extend(tuple(temp))
+            keys_with_their_values.append((key, tuple(returned_only_keys)))
+        # Only for last dict-objects
+        else:
+            only_keys.append(key)
+            keys_with_their_values.append((key, str(value)))
+    if on_key_trail:
+        return only_keys, keys_with_their_values, trailed_keys, n_nestings
+    else:
+        return only_keys, keys_with_their_values, returned_n_nestings
+
 def find_invalid_files(url: str) -> bool:
     if url.endswith(".xml") \
     or url.endswith(".pdf") \
