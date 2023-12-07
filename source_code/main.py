@@ -25,6 +25,8 @@ if not BLOCK_API_CALL:
     openai.api_key = os.getenv("OPENAI_API_KEY")
 with open(FILE_PATH_PROMPT_ROLE_SUMMARY, "r") as file:
     PROMPT_ROLE_SUMMARY = file.read()
+
+# Compiled regular expressions
 regex_url_has_query = re.compile(r"[?!)(=&+%@#]{1}")
 regex_valid_url_format = re.compile(r"^(?:https:\/\/)?|^\/{1}[^\/].*|^www[.].*")
 regex_too_short_url_end = re.compile(r"^[.a-zA-Z0-9]+(-[.a-zA-Z0-9]+){,2}$")
@@ -43,6 +45,9 @@ regex_topics = re.compile(r"Topics: (.*).*", flags=re.DOTALL)
 regex_creation_datetime = re.compile(r"Creation DateTime: (.*).*", flags=re.DOTALL)
 regex_update_datetime = re.compile(r"Update DateTime: (.*).*Body Summary", flags=re.DOTALL)
 regex_only_summary = re.compile(r"Body Summary:(.*)", flags=re.DOTALL)
+
+# OpenAI client variable
+assistant_client = None
 
 ## Decorators
 def garbage_logger():
@@ -293,6 +298,25 @@ def extract_data_from_metadata(parsed_html: BeautifulSoup,
             extraction_completed = True
     return data_extacted
 
+def assign_assistant_role() -> bool:
+    try:
+        if not ASSISTANT_ID:
+            assistant_client = openai.OpenAI()
+
+            # Create an assistant using the file ID
+            assistant = assistant_client.beta.assistants.create(
+                instructions=PROMPT_ROLE_SUMMARY,
+                model="gpt-4-1106-preview",
+                tools=[{"type": "code_interpreter"}],
+                file_ids=[]
+                )
+            ASSISTANT_ID = assistant.id
+        # Process success
+        return True
+    except:
+        # Process error
+        return False
+
 def call_completion_api(text: str, prompt: str) -> str:
     """
     Generates a chat response using OpenAI's GPT-3.5 Turbo model by using a 
@@ -316,6 +340,22 @@ def call_completion_api(text: str, prompt: str) -> str:
             ]
     )
     return openai_response["choices"][0].message["content"]
+
+def run_assistant(text: str) -> str:
+    thread = assistant_client.beta.threads.create(
+        messages=[
+            {
+                "role": "user",
+                "content": text,
+                "file_ids": []
+            }
+                ]
+        )
+    
+    run = assistant_client.beta.threads.runs.create(
+        thread_id=thread.id,
+        assistant_id=ASSISTANT_ID
+        )
 
 def extract_keys_with_completion(parsed_code: BeautifulSoup) -> dict:
     """
@@ -917,6 +957,9 @@ def main_multi_threading_process(queued_media_data: dict):
 
 if __name__ == "__main__":
     print(f"\n...Datetime of process: {CURRENT_DATE} {CURRENT_TIME}...\n")
+
+    # Create assistant
+    assign_assistant_role()
 
     # Extract the last version
     num_last_version = ut.get_last_sections_file_num(PATH_SECTIONS_FILE)

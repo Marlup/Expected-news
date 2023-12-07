@@ -1,4 +1,6 @@
 import os
+## Globals (mutable)
+ASSISTANT_ID = ""
 ## Constants
 FULL_START = True
 BLOCK_API_CALL = True
