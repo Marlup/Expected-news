@@ -7,3 +7,4 @@ db.sqlite3
 */obsolete/
 */extraction-errors.txt
 /data/errors/*_extraction_errors.txt
+/local_tests_*
