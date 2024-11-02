@@ -1,0 +1,23 @@
+Source: https://help.openai.com/en/articles/5112595-best-practices-for-api-key-safety
+Help: https://www3.ntu.edu.sg/home/ehchua/programming/howto/Environment_Variables.html#:~:text=2.2%20Set%2FUnset%2FChange%20an,it%20to%20an%20empty%20string.
+
+**IMPORTANT** accept all windows changes and reboot your computer to complete changes.
+
+An environment variable is a variable that you or your applications set in your operating system, rather than within your application. 
+It is has a key-value structure. We recommend that you name the env variable to 'OPENAI_API_KEY'. 
+By keeping this env variable consistent across your team, you can commit and share your code without the risk of exposing your API key.
+
+* Instructions for Windows OS users *
+
+Let's set your ‘OPENAI_API_KEY’ Environment Variable via the CMD prompt
+
+1) Open CMD prompt.
+
+2) Run the following command, remember replacing <yourkey> with your API key value: 
+  
+    setx OPENAI_API_KEY “<yourkey>”
+  
+Now OPENAI_API_KEY variable exists as your environment variable in your system. 
+3) You can check the value of the variable by running the 'echo <env_var_name>' command: 
+
+    echo %OPENAI_API_KEY%
