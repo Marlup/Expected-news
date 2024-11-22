@@ -81,7 +81,6 @@ ORDER_KEYS = (
     "n_tokens",
     "score"
     )
-
 # Symbols
 SYMBOLS = (
     "?",
@@ -98,6 +97,7 @@ SYMBOLS = (
 
 # HTTP setups
 HEADERS_REQUEST = {
+
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
 }
 
@@ -158,6 +158,7 @@ INSERT_NEWS_QUERY = """
         )
     ;
 """
+
 SELECT_ALL_URLS_IN_MEDIA_QRY_STR = """
     SELECT 
         url

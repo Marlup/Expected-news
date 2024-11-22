@@ -40,7 +40,6 @@ logging.basicConfig(filename=f"data/logs/bad_urls/bad_urls_{CURRENT_DATE}_{CURRE
                     datefmt="%H:%M:%S",
                     force=True,
                     )
-
 # Get API_KEY
 if not BLOCK_API_CALL:
     openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -877,7 +876,7 @@ def _search_keys_from_one_news_url(
               the data extraction process.
 
     """
-
+    
     response, code = _request_content_from_url(url)
     
     if code != STATUS_0:

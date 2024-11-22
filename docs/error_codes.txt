@@ -17,7 +17,6 @@
 4 - general gpt api error
 5 - general data/metadata extraction error
     5.1 - unknown data/metadata error
-    	  
     5.2 - Attribute 'property' and with value 'published_data' not found at tag 'meta'.
     5.3 - Empty value (i.e. published_data) in 'content' attribute at 'meta' tag.
     5.4 - Attribute 'published_date' exists but is old.
