@@ -1,0 +1,34 @@
+1. Install library requirements from 'requirements.txt' file
+
+2.1. Open a terminal and change the directory to root/project directory 
+     (the directory name will be 'GPTNews' if you cloned it directly from the github 
+     repository).
+
+2.2. To create the databases (django models), run these two commands in 
+     the terminal from the root directory:
+     
+     	* First *
+      
+         python manage.py makemigrations
+   
+      * Second *
+
+     	   2 python manage.py migrate
+
+3. Now you are ready to run the 'main.py' file, which is located in 'source' directory.
+   The process (scraping + processes) will take 10 to 20 minutes. Once the program is finished, if you re-run 'main.py', it 
+   will take less time to finish (~ 1 min) because most of the data was already scraped and stored in the database.
+
+5. The news data is loaded in a SQLite database, but you have to manually validate it (only in pre-alpha version for testing purposes): open the notebook
+   'preprocess_news_test.ipynb' and run all (you can also press 'run-all' button).
+   Now the database has news that are ready to be queried by the server, i.e. they can
+   be shown on the webpage.
+
+6. Once the previous process finishes, you are up to run the server. If django was 
+   installed already, run this command in the terminal:
+
+   	python manage.py runserver
+
+7. Now that the server is running, the webpage can be accessed from your favourite browser at localhost:
+	
+   	https://localhost:8000
