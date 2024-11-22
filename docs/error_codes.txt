@@ -2,25 +2,27 @@
 * Status codes: *
 *****************
 0 - OK
-1 - general invalid request
-    1.1 - too many request retries attempted
-    1.2 - ambiguous invalid request error
-    1.3 - unicode error
-2 - general web is not an article
-3 - general invalid url
-    3.1 - equal news and media url
-    3.2 - invalid file type from news url
-    3.3 - process-irrelevant news url node
-    3.4 - there is not a node in news url
-    3.5 - not-long-enough end-node in news url
-    3.6 - media url is not contained in news url
+1 - invalid request
+    1.1 - reached request retries. 
+    1.2 - ambiguous invalid request error.
+    1.3 - unicode error.
+2 - incoming web is not an article
+3 - incoming invalid url
+    3.1 - news and media urls are equal.
+    3.2 - invalid html file from news url.
+    3.3 - irrelevant topic.
+    3.4 - there is not any topic in the url.
+    3.5 - too short topic word in url.
+    3.6 - news url does no contain the media url.
 4 - general gpt api error
 5 - general data/metadata extraction error
     5.1 - unknown data/metadata error
     	  
-    5.2 - meta tag with property attribute and published_data value not found
-    5.3 - empty value (i.e. published_data) in content attribute from meta tag
-    5.4 - published_date found, but older than 
-    	  current date - N_MAX_DAYS_OLD (constant)
-    5.5 - title/headline or published_date not found
-    5.6 - article body not found
+    5.2 - Attribute 'property' and with value 'published_data' not found at tag 'meta'.
+    5.3 - Empty value (i.e. published_data) in 'content' attribute at 'meta' tag.
+    5.4 - Attribute 'published_date' exists but is old.
+    5.5 - Attributes 'title/headline' or 'published_date' not found.
+    5.6 - Article body not found.
+    5.7 - Tag 'meta' does not contain value 'article' at attribute 'content'.
+    5.8 - Tag 'html' was not found.
+    5.9 - Tag 'head' was not found.

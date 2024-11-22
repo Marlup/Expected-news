@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 import json
@@ -24,16 +25,22 @@ from main_utils import (
 
 from constants import *
 
-# Classes
-class ErrorReporter(Exception):
-    def __init__(self, message):
-        self.message = message
-        super().__init__(message)
-        with open("data/undefined_errors_log.txt", "w") as errors_file:
-            errors_file.write(message)
 # Dates and times
 TODAY_LOCAL_DATETIME = datetime.now().replace(tzinfo=timezone.utc)
-CURRENT_DATE, CURRENT_TIME = str(datetime.today()).split(" ")
+dt = datetime.today() \
+             .strftime(f"%Y %m %d_%H %M %S")
+CURRENT_DATE, CURRENT_TIME = str(dt).split("_")
+
+# Logging
+#logger_bad_url = logging.getLogger(LOGGER_NAME_BAD_URL)
+logging.basicConfig(filename=f"data/logs/bad_urls/bad_urls_{CURRENT_DATE}_{CURRENT_TIME[:3]}.log", 
+                    filemode="w",
+                    level=logging.INFO, 
+                    format="%(asctime)s,%(funcName)s,%(lineno)d,%(message)s",
+                    datefmt="%H:%M:%S",
+                    force=True,
+                    )
+
 # Get API_KEY
 if not BLOCK_API_CALL:
     openai.api_key = os.getenv("OPENAI_API_KEY")
@@ -46,6 +53,7 @@ regex_url_has_query = re.compile(r"[?!)(=&+%@#]{1}")
 regex_valid_url_format = re.compile(r"^(?:https:\/\/)?|^\/{1}[^\/].*|^www[.].*")
 regex_too_short_url_end = re.compile(r"^[.a-zA-Z0-9]+(-[.a-zA-Z0-9]+){,2}$")
 regex_url_startswith_https = re.compile(r"https?:[\/]{2}")
+#regex_article_content = re.compile(r"(?_)publish(?:ed)?_?(?:time|date)")
 regex_publication_ts = re.compile(r"publish(?:ed)?_?(?:time|date)")
 regex_modification_ts = re.compile(r"modif(?:ied)?_?(?:time|date)")
 regex_application_jsons = re.compile("application[/]{1}ld[+]{1}json")
@@ -83,6 +91,9 @@ def garbage_logger():
     return decorator
 
 ## Functions
+def add_new_log_line(message):
+    logging.info(message)
+
 def search_news_keys_from_jsons(
     html: BeautifulSoup, 
     url: str,
@@ -581,9 +592,13 @@ def process_raw_urls(
               missing body content.
 
     """
+    # Function constants
+    warning_message = ""
+    writer_pid = os.getpid()
 
     media_stats_manager = StatisticsManager(start_time=True, log_dir=PATH_STATS)
-    valid_scraped_urls = validate_raw_urls(raw_urls, media_url)
+    novel_urls = filter_gargabe_urls(raw_urls, media_url)
+    valid_scraped_urls = validate_raw_urls(novel_urls, media_url)
     
     if len(valid_scraped_urls) > 0:
         lock = mp.Lock()
@@ -627,36 +642,87 @@ def process_raw_urls(
                 
         # Statistics
         n_processed = len(news_data)
-        n_db_fetched = len(db_fetched_urls)
-        n_scraped = len(scraped_urls)
-        n_inputs_to_process = len(news_to_process)
-        n_outputs_from_process = len(news_data)
+        n_fetch_from_db = len(db_fetched_urls)
+        n_scrap_from_web = len(scraped_urls)
+        n_to_processing = len(news_to_process)
+        n_insertions_to_db = len(news_data)
+
+        # Set a warning if there are news to process but no new news to insert
+        if n_insertions_to_db == 0:
+            warning_message = "0 insertions to db"
         
-        print(f"\nSummary of PID {str(os.getpid())} at media {media_url}:")
-        print(f"\t- number of urls fetched from db {n_db_fetched}")
-        print(f"\t- number of urls scraped from web {n_scraped}")
-        print(f"\t- number of inputs to process {n_inputs_to_process}")
-        print(f"\t- number of insertions on database {n_outputs_from_process}\n")
+        print(f"""
+        Summary of PID {writer_pid} at media {media_url}:
+            · URLs fetched from db:        {n_fetch_from_db}
+            · URLs scraped from web:       {n_scrap_from_web}
+            · URLs to processing:          {n_to_processing}
+            · URLs sent to db:             {n_insertions_to_db}
+        """)
     else:
         n_processed = 0
         n_no_body = 0
     
-    stats_for_log = (media_url, n_processed, n_no_body)
+    stats_for_log = (media_url, n_processed, n_no_body, warning_message)
     
-    media_stats_manager.write_stats(
-        stats_for_log, 
-        writer_id=os.getpid()
-        )
+    media_stats_manager.write_stats(stats_for_log, writer_id=writer_pid)
     
     return n_processed, n_no_body
 
+def filter_gargabe_urls(scraping_urls: list, media_url: str) -> tuple[list, dict]:
+    """
+    Filters list of input URLs, avoiding known garbage URLs.
+
+    Args:
+        scraping_urls (list): URLs to be filtered.
+        media_url (str): URL associated with the media source.
+
+    Returns:
+        list: Curated URLS.
+    """
+
+    n_urls = len(scraping_urls)
+    columns_db = ["url_from_db", "media_url_from_db"]
+    columns_scraping = ["url_from_scraping", "media_url_from_scraping"]
+
+    # Open file of garbage urls to avoid
+    lock = mp.Lock()
+    with lock:
+        db_data = pd.DataFrame(
+            read_garbage((media_url, )), 
+            columns=columns_db
+            )
+    
+    # Create a DataFrame of URLs to compare against
+    scraping_data = pd.DataFrame(
+        dict(
+            url_from_scraping=scraping_urls, 
+            media_url_from_scraping=n_urls * [media_url]
+            )
+        ).drop_duplicates()
+    
+    # Urls from garbage table query
+    novel_urls_series = scraping_data.merge(
+        db_data,
+        left_on=columns_scraping,
+        right_on=columns_db,
+        how="left",
+        indicator=True
+        ).query('_merge == "left_only"')["url_from_scraping"] \
+         .tolist()
+    
+    # Merge extracted and loaded news in order to process the new ones
+    #urls_to_process = novel_urls.loc[novel_urls[columns_db].isnull().all(axis=1), "url_from_scraping"]
+    #print("garbage_urls:", len(db_data), "input urls:", len(input_urls), "urls_to_process:", len(urls_to_process))
+
+    return novel_urls_series
+
 @garbage_logger()
-def validate_raw_urls(input_urls: list, media_url: str) -> tuple[list, dict]:
+def validate_raw_urls(urls: list, media_url: str) -> tuple[list, dict]:
     """
     Filters and validates a list of input URLs, avoiding known garbage URLs.
 
     Args:
-        input_urls (list): URLs to be filtered and validated.
+        urls (list): URLs to be filtered and validated.
         media_url (str): URL associated with the media source.
 
     Returns:
@@ -664,32 +730,12 @@ def validate_raw_urls(input_urls: list, media_url: str) -> tuple[list, dict]:
             - The first element is a list of validated and filtered URLs.
             - The second element is a dictionary providing information about 
               garbage URLs.
-
     """
-    # Open file of garbage urls to avoid
-    lock = mp.Lock()
-    with lock:
-        read_urls = pd.DataFrame(read_garbage((media_url, )), 
-                                 columns=["in_store", "media_store"]
-                                 )
-    # Urls from garbage table query
-    novel_urls = read_urls.merge(
-        pd.DataFrame(
-            dict(in_extraction=input_urls, media_extraction=[media_url] * len(input_urls)
-                 )
-            ).drop_duplicates(), 
-        left_on=["in_store", "media_store"], 
-        right_on=["in_extraction", "media_extraction"], 
-        how="right")
-    
-    # Merge extracted and loaded news in order to process the new ones
-    urls_to_process = novel_urls.loc[novel_urls[["in_store", "media_store"]].isnull().all(axis=1), "in_extraction"]
-    #print("garbage_urls:", len(read_urls), "input urls:", len(input_urls), "urls_to_process:", len(urls_to_process))
+
     garbage = []
     valid_urls = []
-    #status_and_id = []
     
-    for url in urls_to_process.tolist():
+    for url in urls:
         # Filter out urls with query symbols
         if url == media_url:
             #status_and_id.append({"status_code": STATUS_3_1, "id": url})
@@ -723,15 +769,15 @@ def validate_raw_urls(input_urls: list, media_url: str) -> tuple[list, dict]:
         
     #print(f"\t{media_url}; new garbage urls {len(garbage)};", f"Treat {len(valid_urls)} urls\n")
     #cache = {"status_code": status_and_id}
-    unique_valid_urls = list(set(valid_urls))
+    unique_urls = list(set(valid_urls))
     if garbage:
-        return unique_valid_urls, garbage
+        return unique_urls, garbage
     else:
-        return unique_valid_urls, garbage
-    
+        return unique_urls, garbage
+
 @garbage_logger()
 def search_news_keys_from_valid_urls(
-    news_urls: list, 
+    urls: list, 
     media_url: str,
     score: float,
     order_keys=True
@@ -740,7 +786,7 @@ def search_news_keys_from_valid_urls(
     Extracts news data from a list of URLs associated with a media source.
 
     Args:
-        news_urls (list): A list of news URLs to be processed.
+        urls (list): A list of potential news URLs to be processed.
         media_url (str): The URL associated with the media source.
         score (float): A score or rating for processing URLs.
         order_keys (bool, optional): If True, the keys in the extracted data are ordered.
@@ -757,9 +803,9 @@ def search_news_keys_from_valid_urls(
     news_data = []
     garbage_urls = []
     n_no_articlebody_in_article = 0
-    for news_url in news_urls:
+    for url in urls:
         data, code = _search_keys_from_one_news_url(
-            news_url, 
+            url, 
             media_url,
             score,
             order_keys
@@ -768,7 +814,7 @@ def search_news_keys_from_valid_urls(
         if not data:
             garbage_urls.append(
                 (
-                    news_url, 
+                    url, 
                     media_url, 
                     code
                     )
@@ -785,16 +831,39 @@ def search_news_keys_from_valid_urls(
     else:
         return (news_data, n_no_articlebody_in_article), garbage_urls
 
+def url_has_article_attribute(parsed_html: BeautifulSoup) -> bool:
+    """
+    Checks if a URL has an article attribute
+    """
+
+    if parsed_html.html is None:
+        return STATUS_5_8
+
+    html_head = parsed_html.html.head
+
+    if html_head is None:
+        return STATUS_5_9
+
+    meta_tag = html_head.find(
+        "meta", attrs=dict(content="article")
+        )
+    
+    if meta_tag is None:
+        return STATUS_5_7
+    return STATUS_0
+
 def _search_keys_from_one_news_url(
-    news_url: list, 
+    url: list, 
     media_url: str,
     score: float,
-    order_keys: bool=True) -> tuple[dict[str, str | int], str]:
+    order_keys: bool=True
+    ) -> tuple[dict[str, str | int], str]:
     """
-    Extracts data from one news URL, including JSON, metadata, and summary information.
+    Extracts data from one potential news URL, including JSON, metadata, and
+    summary information.
 
     Args:
-        news_url (str): The URL of the news article to be processed.
+        url (str): The URL of the potential news article to be processed.
         media_url (str): The URL associated with the media source.
         score (float): A score or rating for processing the URL.
         order_keys (bool, optional): If True, the keys in the extracted data 
@@ -809,42 +878,52 @@ def _search_keys_from_one_news_url(
 
     """
 
-    response, code = _request_content_from_news_url(news_url)
+    response, code = _request_content_from_url(url)
     
     if code != STATUS_0:
         return {}, code
-    parsed_news_hmtl = BeautifulSoup(response.content, "html.parser")
+    parsed_news_html = BeautifulSoup(response.content, "html.parser")
     
-    # Accept or reject url if news date is more than N_MAX_DAYS_OLD days older
-    code = validate_url_by_publication_date(parsed_news_hmtl)
+    # Check whether the url is an article
+    code = url_has_article_attribute(parsed_news_html)
+    if code != STATUS_0:
+        return {}, code
+    
+    # Check if the publication is valid 
+    code = url_has_valid_pub_date(parsed_news_html)
     if code != STATUS_0:
         return {}, code
     
     data = {}
+    
+    # Tries to search for data from the html metadata
+    extracted_data = search_news_keys_from_metadata(parsed_news_html, data)
+    if extracted_data:
+        data.update(extracted_data)
+
+    # Tries to search for data from the application/json
     extracted_data = search_news_keys_from_jsons(
-        parsed_news_hmtl, 
-        news_url, 
+        parsed_news_html, 
+        url, 
         media_url
         )
-    
     if extracted_data:
         data.update(extracted_data)
     
-    extracted_data = search_news_keys_from_metadata(parsed_news_hmtl, data)
-    
-    if extracted_data:
-        data.update(extracted_data)
-    
+    # Extracts the title of the news article
     title_found = data.get("title", False)
+
+    # Extracts the creation datetime of the news article
     creation_datetime_found = data.get("creation_datetime", False)
     if not title_found or not creation_datetime_found:
         return {}, STATUS_5_5
     
+    # Extracts the body of the news article
     body_found = data.get("body", False)
     if not body_found:
         extracted_data = get_body_summary(
-            parsed_news_hmtl, 
-            news_url,
+            parsed_news_html, 
+            url,
             media_url
             )
         
@@ -854,10 +933,10 @@ def _search_keys_from_one_news_url(
         
         data.update(extracted_data)
 
-    data["country"] = parsed_news_hmtl.html.attrs.get("lang", "")
+    data["country"] = parsed_news_html.html.attrs.get("lang", "")
     # TODO complete this
     data["media_url"] = media_url
-    data["url"] = news_url
+    data["url"] = url
     data["score"] = score
 
     if order_keys:
@@ -865,12 +944,12 @@ def _search_keys_from_one_news_url(
     
     return data, STATUS_0
 
-def _request_content_from_news_url(news_url: str) -> tuple[requests.Request, str]:
+def _request_content_from_url(url: str) -> tuple[requests.Request, str]:
     """
-    Sends a GET request to one news URL to retrieve content.
+    Sends a GET request to one potential news URL to retrieve content.
 
     Args:
-        news_url (str): The URL of the news article to send a GET request to.
+        url (str): The URL of the potential news article to send a GET request to.
 
     Returns:
         tuple[requests.Response, int]: A tuple containing two elements:
@@ -880,8 +959,8 @@ def _request_content_from_news_url(news_url: str) -> tuple[requests.Request, str
     """
     try:
         response = requests.get(
-            news_url, 
-            headers=HEADERS, 
+            url, 
+            headers=HEADERS_REQUEST, 
             timeout=MEDIA_GET_REQ_TIMEOUT
             )
     except requests.exceptions.TooManyRedirects as e1:
@@ -894,13 +973,13 @@ def _request_content_from_news_url(news_url: str) -> tuple[requests.Request, str
         return None, STATUS_1_2
     return response, STATUS_0
 
-def validate_url_by_publication_date(parsed_html):
+def url_has_valid_pub_date(parsed_html):
     """
-    Filters out one news URL by its publication date. The date is discarded if
-    1) it's missing,
-    2) it's too old, given specifications, 
-    or 3) its format is not expected or valid.
-
+    Accepts or rejects the url if the publication date is less than 
+    N_MAX_DAYS_OLD days old. The date is discarded either it is:
+        1) missing
+        2) too old, given specifications, 
+        3) format unexpected or invalid.
     Args:
         parsed_html (BeautifulSoup): A BeautifulSoup object representing the 
         parsed HTML content.
@@ -980,25 +1059,25 @@ def insert_data(data: tuple[tuple], query: str, retries=5, initial_delay=0.1):
                 cursor.executemany(query, data)
                 conn.commit()  # Commit the transaction
             break  # Exit loop if the insertion is successful
-
+        
         except sqlite3.OperationalError as e:
             if "locked" in str(e):
                 print(f"Database is locked. Retrying in {delay} seconds...")
                 time.sleep(delay)  # Wait before retrying
-                delay *= 2  # Exponential backoff: double the delay for each retry
+                delay *= 2  # Exponential backoff: double the delay at each retry
                 retries -= 1  # Decrease the retry count
             else:
-                raise  # If it's not a locking issue, re-raise the exception
+                raise # If it's not a locking issue, re-raise the exception
 
     if retries == 0:
-        print("Failed to insert data after multiple retries.")
+        print("Failed at db insert after multiple retries.")
 
-def run_multi_process(file_path: str, num_processes: int, process_function):
+def run_multi_process(sections_file_path: str, num_processes: int, process_function):
     """
     Runs a specified process function in parallel using multiple processes.
 
     Args:
-        file_path (str): The path to the input file containing data for 
+        sections_file_path (str): The path to the input file containing data for 
         parallel processing.
         num_processes (int): The number of parallel processes to create and 
         run.
@@ -1014,17 +1093,18 @@ def run_multi_process(file_path: str, num_processes: int, process_function):
 
     """
 
-    with open(file_path, "r") as file:
-        data = json.load(file)
+    # Load the sections urls and other data, as a dictionary
+    with  open(sections_file_path, 'r') as f:
+        sections_data = json.load(f)
 
     with mp.Manager() as manager:
-        sections_data = manager.dict(data)
+        queue_sections_data = manager.dict(sections_data)
         # Create a process for each chunk and run in parallel
         processes = []
         for _ in range(num_processes):
             process = mp.Process(
                 target=process_function, 
-                args=(sections_data, )
+                args=(queue_sections_data, )
                 )
             processes.append(process)
             process.start()
@@ -1032,18 +1112,18 @@ def run_multi_process(file_path: str, num_processes: int, process_function):
         for process in processes:
             process.join()
 
-def main_multi_threading_process(queued_media_data: dict):
+def main_multi_procesing_process(queue_data: dict):
     """
     Process news articles in parallel from queued media data using 
-    multi-threading.
+    multi-procesing.
 
     Args:
-        queued_media_data (dict): A dictionary containing media URLs and 
-        associated sections and scores.
+        queue_data (dict): A container of media URLs, associated sections
+          and scores.
 
     Notes:
     - This function processes news articles in parallel from queued media data
-      using multi-threading.
+      using multi-procesing.
     - It iterates through media URLs and their associated sections and scores, 
       making HTTP requests to extract news article URLs.
     - Extracted URLs are processed, and statistics are recorded for the number 
@@ -1057,58 +1137,59 @@ def main_multi_threading_process(queued_media_data: dict):
     n_processed = 0
     n_no_body = 0
     
-    while len(queued_media_data) > 0:
-        # The Dict-proxy can safely remove items, as the multiprocessing.Manager()  
+    while len(queue_data) > 0:
+        # The List-proxy can safely remove items, as the multiprocessing.Manager()  
         # takes care of the necessary internal locking mechanisms to ensure 
         # safe concurrent access.
-        media_url, sections_and_scores = queued_media_data.popitem()
-        for i, (section_url, score) in enumerate(sections_and_scores["data"]):
+        domain, sections_data = queue_data.popitem()
+        domain_url = "https://" + domain
+
+        for section_url, _, score in sections_data["records"]:
             score = float(score)
             section_url = section_url.strip()
-            if not media_url.startswith("https://"):
-                media_url = "https://" + media_url
+
             try:
                 response = requests.get(
                     section_url, 
-                    headers=HEADERS, 
+                    headers=HEADERS_REQUEST, 
                     timeout=NEWS_ARTICLE_GET_REQ_TIMEOUT
                     )
             except requests.exceptions.Timeout:
-                # Handle the timeout exception
-                print("The request timed out.")
-                ErrorReporter(f"Get request timeout exception at {section_url}")
+                # Report the timeout exception at the log
+                add_new_log_line("Request timeout at {section_url}")
                 continue
             except requests.exceptions.RequestException as e:
                 # Handle other request exceptions
-                print(f"An error occurred: {str(e)}")
-                print("Retrying request without 'www'")
+                print(f"An error occurred: {str(e)}\n \
+                      Retrying request without 'www'")
                 section_url = section_url.replace("www.", "")
                 try:
                     response = requests.get(
                         section_url, 
-                        headers=HEADERS, 
+                        headers=HEADERS_REQUEST, 
                         timeout=NEWS_ARTICLE_GET_REQ_TIMEOUT
                         )
                 except Exception as e:
-                    print(f"Unexpected exception at second request attempt to \
-                          url {section_url}:\n{e}")
+                    # Report the exception at the log
+                    add_new_log_line(f"Unexpected exception at second request to {section_url}:\n{e}")
                     continue
+                # Report the exception at the log
+                add_new_log_line(f"Get request general exception, {e}, at {section_url}")
                 
-                #ErrorReporter(f"Get request general exception, {e}, at {section_url}")
-                media_url = media_url.replace("www.", "")
+                domain_url = domain_url.replace("www.", "")
                 print("Request success without 'www'")
             
             try:
                 parsed_hmtl = BeautifulSoup(response.content, "html.parser")
                 
                 tags_with_url = parsed_hmtl.html.body \
-                                        .find_all(
-                                            "a", 
-                                            href=regex_valid_url_format)
-                                        # href=re.compile("https?:.*"))
+                                           .find_all(
+                                               "a", 
+                                               href=regex_valid_url_format)
+                                               # href=re.compile("https?:.*"))
             except Exception as e:
-                print(f"Exception at find_all 'a' tags: 'body' tag was not \
-found in html from resource {section_url}:\n{e}")
+                add_new_log_line(f"Unexpected exception at fetching <a href=...> \
+                                  tags: 'body' not found at section {section_url}:\n{e}")
                 continue
             
             raw_urls = [x.attrs["href"] for x in tags_with_url if x.attrs.get("href", False)]
@@ -1122,7 +1203,7 @@ found in html from resource {section_url}:\n{e}")
                 if raw_url.startswith("//"):
                     raw_url = "https:" + raw_url
                 elif raw_url.startswith("/"):
-                    raw_url = media_url[:-1] + raw_url
+                    raw_url = domain_url[:-1] + raw_url
                 elif raw_url.startswith("www.") \
                   or not raw_url.startswith("https://"):
                     raw_url = "https://" + raw_url
@@ -1131,13 +1212,13 @@ found in html from resource {section_url}:\n{e}")
         
         # Get unique elements and converto to list.
         media_news_urls = list(set(media_news_urls))
-        n1, n2 = process_raw_urls(media_news_urls, media_url, score)
+        n1, n2 = process_raw_urls(media_news_urls, domain_url, score)
         
         # Update counters
         n_processed += n1
         n_no_body += n2
     
-    stats_for_log = ("Process summary", n_processed, n_no_body)
+    stats_for_log = ("Process summary", n_processed, n_no_body, "")
     
     media_stats_manager.write_stats(
         stats_for_log, 
@@ -1151,11 +1232,11 @@ if __name__ == "__main__":
     assistant = set_or_create_assistant()
 
     # Extract the last version
-    num_last_version = get_last_sections_file_num(PATH_MEDIA_SECTIONS_FILE)
+    num_last_version = get_last_sections_file_num(PATH_FILE_MEDIA_SECTIONS)
     run_multi_process(
         f"data/sources/source_urls_v{num_last_version}.json", 
-        NUM_CORES, 
-        main_multi_threading_process
+        NUM_PROCESSING_WORKERS, 
+        main_multi_procesing_process
         )
     #for f in glob.glob(os.path.join(PATH_DATA, "checkpoint_*.json")):
     #    os.remove(os.path.join(PATH_DATA, f))

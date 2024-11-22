@@ -1,3 +1,0 @@
-Hay varias versiones, pero la última es la más depurada. Los textos de prueba están en la misma carpeta. 
-Son textos extraidos del HTML a partir de los tags "p" y "h", o sea, sacan prácticamente todo el texto que se puede leer 
-en la página compilada del HTML, lol

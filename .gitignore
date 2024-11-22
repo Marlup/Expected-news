@@ -1,10 +1,5 @@
-/testing/data/statistics/webscraping/processes_*/*
-/testing/data/errors*/*
-/testing/*/obsolete/
-db.sqlite3
-*/__pycache__/
-*/.ipynb_*/
-*/obsolete/
-*/extraction-errors.txt
-/data/errors/*_extraction_errors.txt
-/local_tests_*
+/data/webscraping_statistics/
+/data/logs/
+db.sqlite3*
+__pycache__
+*.ipynb_*

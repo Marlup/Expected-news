@@ -1,7 +1,7 @@
-import os
-## Globals (mutable)
+#import os
+
+# Constants
 ASSISTANT_ID = ""
-## Constants
 FULL_START = True
 BLOCK_API_CALL = True
 N_BATCH_ELEMENTS = 20
@@ -10,14 +10,14 @@ MEDIA_GET_REQ_TIMEOUT = 10.0
 NEWS_ARTICLE_GET_REQ_TIMEOUT = 8.0
 SECONDS_IN_DAY = 86_400
 N_MAX_DAYS_OLD = 1
-NUM_CORES = 10
+NUM_PROCESSING_WORKERS = 10
 MAX_N_MEDIAS = 50
 N_SAVE_CHECKPOINT = 5
-ASSISTANT_ID = ""
+DEFAULT_SEPARATOR = ";"
+DEFAULT_HEADERS_CSV_STATS = "url;news_count;total_duration;warning_message\n"
 
 # Constants for medias process
 MAX_HYPHENS = 1
-N_EXAMPLES = 1000
 MIN_TOPIC_OCCURRENCE = 5
 DEFAULT_STEMMER_LANGUAGE = "spanish"
 REGEX_SEARCH_URL_1_SEGMENT = r"^(?:\w*:?)\/{2}[^\/]+\/[^\/]*\/?$"
@@ -44,6 +44,10 @@ STATUS_5_3 = "5_3"
 STATUS_5_4 = "5_4"
 STATUS_5_5 = "5_5"
 STATUS_5_6 = "5_6"
+STATUS_5_7 = "5_7"
+STATUS_5_8 = "5_8"
+STATUS_5_9 = "5_9"
+
 # File and path names
 DB_NAME_NEWS = "db.sqlite3"
 DIGITAL_MEDIAS_URL = "https://www.prensaescrita.com/prensadigital.php"
@@ -52,10 +56,15 @@ PATH_DATA = "data"
 PATH_STATS = "data/webscraping_statistics"
 PATH_ERRORS = "data/logs/errors"
 PATH_GARBAGE_URLS = "data/garbage_urls"
-PATH_MEDIA_SECTIONS_FILE = "data/sources/source_urls_v*.json"
+PATH_FILE_MEDIA_SECTIONS = "data/sources/source_urls_v*.json"
+PATH_FILE_RANKING = "data/sources/ranking_media.csv"
 FILE_PATH_EXTRACTION_ERRORS = "data/logs/extraction_errors.txt"
 #FILE_PATH_PROMPT_ROLE_KEYS = os.path.join(PATH_DATA, "role_prompt_keys.txt")
 FILE_PATH_PROMPT_ROLE_SUMMARY = "data/sources/role_prompt_body.txt"
+
+# Logger names
+LOGGER_NAME_BAD_URL = "Logger-bad-url"
+
 # Data structures
 ORDER_KEYS = (
     "url",
@@ -72,6 +81,7 @@ ORDER_KEYS = (
     "n_tokens",
     "score"
     )
+
 # Symbols
 SYMBOLS = (
     "?",
@@ -85,8 +95,9 @@ SYMBOLS = (
     ")",
     "%"
 )
+
 # HTTP setups
-HEADERS = {
+HEADERS_REQUEST = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36"
 }
 
@@ -147,7 +158,6 @@ INSERT_NEWS_QUERY = """
         )
     ;
 """
-
 SELECT_ALL_URLS_IN_MEDIA_QRY_STR = """
     SELECT 
         url
