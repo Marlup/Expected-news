@@ -9,14 +9,15 @@ import multiprocessing
 import re
 import glob
 from constants import (
-    HEADERS,
+    HEADERS_REQUEST,
     PATH_DATA,
     DB_NAME_NEWS, 
     DB_TIMEOUT, 
     PATH_STATS,
     DIGITAL_MEDIAS_URL,
     DIGITAL_MEDIAS_MAIN_ROOT,
-    SYMBOLS
+    SYMBOLS,
+    DEFAULT_HEADERS_CSV_STATS
 )
 from typing import List, Union
 
@@ -121,7 +122,7 @@ def update_date(current_date, current_time):
     return current_date, current_time
 
 def get_region_to_url(ignores, file_path=None, on_save=False, on_override=False):
-    response = requests.get(DIGITAL_MEDIAS_URL, headers=HEADERS)
+    response = requests.get(DIGITAL_MEDIAS_URL, headers=HEADERS_REQUEST)
     parsed_hmtl = BeautifulSoup(response.content, "html.parser")
 
     tags = parsed_hmtl.find_all(lambda tag: tag.name == "a" and tag.attrs["href"] is not None)
@@ -146,7 +147,7 @@ def get_region_to_url(ignores, file_path=None, on_save=False, on_override=False)
     return region_to_media_urls
 
 def _get_url_medias_from_region(url):
-    response = requests.get(url, headers=HEADERS)
+    response = requests.get(url, headers=HEADERS_REQUEST)
     parsed_hmtl = BeautifulSoup(response.content, "html.parser")
     links = parsed_hmtl.find_all("a", string=lambda text: text and "www." in text)
     return [l["href"] for l in links]
@@ -171,7 +172,9 @@ def read_garbage(where_params):
     with sqlite3.connect(DB_NAME_NEWS, 
                          timeout=DB_TIMEOUT) as conn:
         cursor = conn.cursor()
-        if not isinstance(where_params, (tuple, list)):
+        is_params_container = isinstance(where_params, (tuple, list))
+
+        if not is_params_container:
             where_params = (where_params, )
         query_str = """
             SELECT 
@@ -181,9 +184,10 @@ def read_garbage(where_params):
                 garbage
             WHERE
                 mediaUrl = ?
-            """
+                """
     return cursor.execute(query_str, 
-                          where_params).fetchall()
+                          where_params) \
+                 .fetchall()
 
 def save_checkpoint(pid, last_value):
     with open(os.path.join(PATH_DATA, f"checkpoint_{pid}.json"), "w") as file:
@@ -285,9 +289,20 @@ class StatisticsManager():
     def write_stats(
             self, 
             data, 
-            header:str="", 
+            header:str=DEFAULT_HEADERS_CSV_STATS, 
             writer_id: str=0, 
             ):
+        """
+        Writes statistical data to a CSV file.
+        
+        Args:
+            data: The data to write.
+            header (str): The default header for the CSV. 
+                          Defaults to the constant DEFAULT_HEADERS_CSV_STATS.
+            writer_id (str): An identifier for the writer instance.
+                             Defaults to 0.
+        """
+        
         # Set the end time of the process for duration
         duration = str(self.set_duration())
         
@@ -307,8 +322,12 @@ class StatisticsManager():
         
         # Set header if first time writting and if header is None
         if write_header and header == "":
-            header = "url;news_count;total_duration\n"
+            header = DEFAULT_HEADERS_CSV_STATS
         
+        # Add skipline to header
+        if write_header and not header.endswith("\n"):
+            header += "\n"
+
         # Catch lock
         lock = multiprocessing.Lock()
         with lock:
